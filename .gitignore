@@ -1,0 +1,5 @@
+.DS_Store
+Thumbs.db
+*.local.*
+# Données réelles : ne jamais publier dans un dépôt public
+supabase/seed.sql
