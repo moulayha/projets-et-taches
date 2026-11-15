@@ -371,7 +371,8 @@ if(!PVIEWS.some(v=>v[0]===S.pView)) S.pView='actifs';
 S.dSort = ['desc','asc','name'].includes(LS.get('pt.dsort','')) ? LS.get('pt.dsort','') : '';
 S.cSort = ['asc','name'].includes(LS.get('pt.csort','')) ? LS.get('pt.csort','') : '';
 S.rSort = ['desc','asc','name'].includes(LS.get('pt.rsort','')) ? LS.get('pt.rsort','') : '';
-S.wSort = ['desc','many','few'].includes(LS.get('pt.wsort','')) ? LS.get('pt.wsort','') : '';
+S.fOwner = LS.get('pt.fowner', '');
+S.wSort =['desc','many','few'].includes(LS.get('pt.wsort','')) ? LS.get('pt.wsort','') : '';
 ['pSort','tSort'].forEach(sk => { try { const s = JSON.parse(LS.get('pt.' + sk.toLowerCase(), 'null')); if(s && typeof s.k === 'string' && (s.dir === 1 || s.dir === -1)) S[sk] = s; } catch(e){} });
 if(!TVIEWS.some(v=>v[0]===S.tView)) S.tView='parprojet';
 
@@ -617,9 +618,27 @@ function donut(ps){
 }
 
 /* ---------- task views ---------- */
+function ownerFilter(all, f){
+  const counts = new Map(); let none = 0;
+  all.forEach(t => { const o = t.owners || []; if(!o.length) none++; o.forEach(id => counts.set(id, (counts.get(id) || 0) + 1)); });
+  const ppl = [...counts.keys()].map(id => ({id, name: personName(id), n: counts.get(id)})).sort((a,b) => a.name.localeCompare(b.name, 'fr', {sensitivity:'base'}));
+  const me = S.me && counts.has(S.me.pid) ? `<option value="${esc(S.me.pid)}"${f === S.me.pid ? ' selected' : ''}>Moi (${counts.get(S.me.pid)})</option>` : '';
+  return `<div class="sortbar filterbar"><label for="fOwner">Responsable</label>
+    <select id="fOwner"><option value="">Tous (${all.length})</option>${me}
+      ${none ? `<option value="__none"${f === '__none' ? ' selected' : ''}>Non assigné (${none})</option>` : ''}
+      <optgroup label="Personnes">${ppl.map(p => `<option value="${esc(p.id)}"${f === p.id && (!S.me || p.id !== S.me.pid || !me) ? ' selected' : ''}>${esc(p.name)} (${p.n})</option>`).join('')}</optgroup>
+    </select>${f ? `<button type="button" class="btn" id="fOwnerClear">Effacer le filtre</button>` : ''}</div>`;
+}
 function viewTasks(){
-  const ts = tasks();
-  if(!ts.length) return emptyBox('Aucune tâche pour l’instant', 'Crée une tâche avec « Nouvelle tâche », ou depuis la fiche d’un projet.');
+  const all = tasks();
+  if(!all.length) return emptyBox('Aucune tâche pour l’instant', 'Crée une tâche avec « Nouvelle tâche », ou depuis la fiche d’un projet.');
+  let f = S.fOwner || '';
+  if(f && f !== '__none' && !all.some(t => (t.owners||[]).includes(f))) f = '';
+  if(f === '__none' && !all.some(t => !(t.owners||[]).length)) f = '';
+  const ts = !f ? all : f === '__none' ? all.filter(t => !(t.owners||[]).length) : all.filter(t => (t.owners||[]).includes(f));
+  return ownerFilter(all, f) + viewTasksOf(ts);
+}
+function viewTasksOf(ts){
   const cols = [TC.name, TC.status, TC.owners, TC.due, TC.prio, TC.tags, TC.blocked, TC.blocks];
   switch(S.tView){
     case 'parprojet': {
@@ -1061,6 +1080,7 @@ function settingsChange(e){
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
   const tab = e.target.closest('[data-pv],[data-tv]');
+  if(e.target.closest('#fOwnerClear')){ S.fOwner = ''; LS.set('pt.fowner', ''); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
   const sd = e.target.closest('[data-sortdir]');
   if(sd){ const sk = sd.dataset.sortdir === 't' ? 'tSort' : 'pSort'; if(S[sk]){ S[sk] = {k:S[sk].k, dir:-S[sk].dir}; LS.set('pt.' + sk.toLowerCase(), JSON.stringify(S[sk])); renderMain(); const b = document.querySelector(`[data-sortdir="${sd.dataset.sortdir}"]`); if(b) b.focus(); } return; }
   const so = e.target.closest('[data-sort]');
@@ -1075,6 +1095,7 @@ document.addEventListener('click', e => {
   if(op && !e.target.closest('[data-act]')){ const i = op.dataset.open.indexOf(':'); openItem(op.dataset.open.slice(0,i), op.dataset.open.slice(i+1)); }
 });
 document.addEventListener('change', e => {
+  if(e.target.id === 'fOwner'){ S.fOwner = e.target.value; LS.set('pt.fowner', S.fOwner); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
   if(['dsort','csort','rsort','wsort'].includes(e.target.id)){ const id = e.target.id, k = id[0] + 'Sort';
     S[k] = e.target.value; LS.set('pt.' + id, S[k]); renderMain(); const d = document.getElementById(id); if(d) d.focus(); return; }
   const sel = e.target.closest && e.target.closest('[data-sortsel]'); if(!sel) return;
