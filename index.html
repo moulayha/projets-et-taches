@@ -1174,12 +1174,18 @@ renderTabs(); renderMain();
     setSync('La connexion à la base Supabase n’est pas configurée (fichier config.js).', true); renderMain(); return;
   }
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey);
-  sb.auth.onAuthStateChange((ev, session) => {
-    if(ev === 'SIGNED_IN' && !S.db) location.reload();
-    if(ev === 'SIGNED_OUT') location.reload();
+  // Recharger seulement quand l'état change vraiment : connexion depuis l'écran
+  // de connexion, ou déconnexion d'une session ouverte. Supabase émet aussi
+  // SIGNED_IN au chargement et au retour sur l'onglet : il ne faut pas recharger.
+  let awaitingLogin = false, hadSession = false;
+  sb.auth.onAuthStateChange((ev) => {
+    if(ev === 'SIGNED_IN' && awaitingLogin){ awaitingLogin = false; location.replace(location.origin + location.pathname); }
+    if(ev === 'SIGNED_OUT' && hadSession){ hadSession = false; location.replace(location.origin + location.pathname); }
   });
   const {data:{session}} = await sb.auth.getSession();
-  if(!session){ loginForm(sb); return; }
+  if(!session){ awaitingLogin = true; loginForm(sb); return; }
+  hadSession = true;
+  if(location.hash && /access_token|error/.test(location.hash)) history.replaceState(null, '', location.pathname);
   const who = $('#who'); who.hidden = false; $('#whoEmail').textContent = session.user.email || '';
   $('#logout').addEventListener('click', () => sb.auth.signOut());
   const al = await sb.from('allowed_users').select('email').limit(1);
