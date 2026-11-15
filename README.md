@@ -23,8 +23,10 @@ L'application tient dans une seule page statique (`index.html`). Les données so
 3. **Comptes.** Crée le premier administrateur avec les deux lignes à la fin de `schema.sql`, puis donne-lui un mot de passe dans le tableau de bord Supabase. Ensuite, tout se gère dans l'application, sous **Paramètres → Utilisateurs** : créer un compte (email + mot de passe provisoire), changer le rôle, définir un nouveau mot de passe ou supprimer un compte. Chacun peut changer son mot de passe avec **Mon mot de passe**.
 
    Les rôles possibles :
-   - **Administrateur** : voit tout, gère les paramètres et les accès.
-   - **Membre** : ne voit que les projets où il est responsable, pilote ou créa, ainsi que les tâches de ces projets ou dont il est responsable.
+   Tout le monde voit tous les projets et toutes les tâches.
+   - **Lecture seule** : consulte sans rien modifier.
+   - **Membre** : crée, modifie et supprime projets et tâches.
+   - **Administrateur** : comme un membre, et gère en plus les paramètres et les comptes.
 
    Ces droits sont appliqués par la base elle-même (RLS), pas seulement par l'interface.
 4. **Configuration.** Dans `config.js`, mets l'URL du projet et la clé *publishable*. On les trouve dans *Project Settings → API Keys*.

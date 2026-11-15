@@ -404,6 +404,7 @@ function fd(s){ const d = parseD(s); return d ? fmtL.format(d) : ''; }
 function hashColor(str){ let h=0; for(const ch of String(str)) h=(h*31+ch.charCodeAt(0))>>>0; return PALETTE[h % PALETTE.length]; }
 const byCreated = (a,b) => (a.createdAt||0)-(b.createdAt||0) || String(a.id).localeCompare(String(b.id));
 const isAdmin = () => !!(S.me && S.me.role === 'admin');
+const canEdit = () => !!(S.me && (S.me.role === 'admin' || S.me.role === 'member'));
 const mineP = p => !!(S.me && p && [...(p.owners||[]), ...(p.pilots||[]), ...(p.creas||[])].includes(S.me.pid));
 const mineT = t => !!(S.me && ((t.owners||[]).includes(S.me.pid) || (t.project && mineP(S.projects.get(t.project)))));
 const allP = () => [...S.projects.values()];
@@ -415,7 +416,7 @@ function renderMine(){
   b.setAttribute('aria-pressed', S.mine ? 'true' : 'false');
   b.textContent = S.mine ? 'Mes affectations' : 'Tous les projets';
   const p = S.me && S.people.get(S.me.pid);
-  $('#whoName').textContent = p ? (p.name || '') + (isAdmin() ? ' · admin' : '') : '';
+  $('#whoName').textContent = p ? (p.name || '') + (' · ' + ({admin:'administrateur', member:'membre', viewer:'lecture seule'}[S.me.role] || '')) : '';
 }
 const tasksOf = pid => tasks().filter(t => t.project === pid);
 const isDoneT = t => (find(TSTAT, t.status)||{}).g === 'done';
@@ -788,8 +789,8 @@ function renderMain(){
   $('#tview').innerHTML = (S.noDb || S.loaded.t || S.tasks.size) ? viewTasks() : emptyBox('Chargement des tâches…', 'Les tâches s’afficheront ici dans un instant.');
   const dis = !S.db || S.readOnly;
   $('#addP').disabled = dis; $('#addT').disabled = dis;
-  $('#addP').hidden = !!S.me && !isAdmin();
-  document.querySelectorAll('.addcard').forEach(b => b.hidden = dis || (b.dataset.add === 'p' && !isAdmin()));
+  $('#addP').hidden = !!S.me && !canEdit();
+  document.querySelectorAll('.addcard').forEach(b => b.hidden = dis || (!!S.me && !canEdit()));
 }
 function setSync(text, warn){ const el = $('#sync'); el.textContent = text; el.classList.toggle('warn', !!warn); }
 
@@ -893,7 +894,7 @@ function renderPanel(){
       <div class="props">${props}</div>
       ${summary}${linked}
       <div class="sect"><h3><label for="f-notes">Notes</label></h3><textarea id="f-notes" data-field="notes" placeholder="Contacts, références, détails pratiques…">${esc(it.notes||'')}</textarea></div>
-      ${ro || (kind === 'p' && !isAdmin()) ? '' : (S.confirmDel
+      ${ro ? '' : (S.confirmDel
         ? `<div class="confirm"><span>Supprimer définitivement ${kind==='p'?'ce projet':'cette tâche'} ? Cette action ne peut pas être annulée.</span><button class="btn" type="button" data-act="nodel">Annuler</button><button class="btn danger" type="button" data-act="yesdel">Supprimer</button></div>`
         : `<div><button class="btn danger" type="button" data-act="del">Supprimer ${kind==='p'?'le projet':'la tâche'}</button></div>`)}
     </div>`;
@@ -1006,7 +1007,7 @@ function renderSettings(){
     const acc = p => S.users.get(p.id);
     const withAcc = all.filter(acc), without = all.filter(p => !acc(p));
     const ed = S.uEdit || {}, busy = S.uBusy;
-    const roleOpts = r => `<option value="member"${r === 'member' ? ' selected' : ''}>Membre</option><option value="admin"${r === 'admin' ? ' selected' : ''}>Administrateur</option>`;
+    const roleOpts = r => `<option value="viewer"${r === 'viewer' ? ' selected' : ''}>Lecture seule</option><option value="member"${r === 'member' ? ' selected' : ''}>Membre</option><option value="admin"${r === 'admin' ? ' selected' : ''}>Administrateur</option>`;
     const pwdField = pid => `<input type="text" class="pwd mono" id="u-pwd" value="${esc(ed.pwd||'')}" placeholder="Mot de passe (8 caractères min.)" autocomplete="new-password" aria-label="Mot de passe" spellcheck="false"><button class="btn" type="button" data-sact="ugen" data-id="${esc(pid)}">Générer</button>`;
     const row = p => { const u = acc(p), self = S.me && p.id === S.me.pid, id = esc(p.id), dis = busy ? ' disabled' : '';
       let extra = '';
@@ -1021,7 +1022,7 @@ function renderSettings(){
           ${ed.pid === p.id ? '' : `<button class="btn" type="button" data-sact="upwd" data-id="${id}"${dis}>${self ? 'Mon mot de passe' : 'Nouveau mot de passe'}</button>${self ? '' : `<button class="btn danger" type="button" data-sact="udel" data-id="${id}"${dis}>Supprimer le compte</button>`}`}</div>${extra}</div>`;
       return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${id}" aria-label="Nom">
         ${ed.pid === p.id ? '' : `<span class="sact"><button class="btn" type="button" data-sact="ucreate" data-id="${id}"${dis}>Créer un compte</button></span>`}${extra}</div>`; };
-    body = `<p class="muted shelp">Chaque compte se connecte avec son <strong>email et son mot de passe</strong>. Un <strong>membre</strong> ne voit que les projets où il est responsable, pilote ou créa, et les tâches de ces projets ou dont il est responsable. Un <strong>administrateur</strong> voit tout et gère les paramètres et les comptes.</p>
+    body = `<p class="muted shelp">Chaque compte se connecte avec son <strong>email et son mot de passe</strong>. Tout le monde voit tous les projets et toutes les tâches. <strong>Lecture seule</strong> : consulte sans rien modifier. <strong>Membre</strong> : peut créer, modifier et supprimer projets et tâches. <strong>Administrateur</strong> : comme un membre, avec en plus l’accès aux paramètres et aux comptes.</p>
     <p class="muted shelp">Pour créer un compte : « Créer un compte », saisis l’email, un mot de passe provisoire (ou « Générer »), choisis le rôle, puis transmets l’email et le mot de passe à la personne. Elle pourra ensuite le changer avec « Mon mot de passe ».</p>
     ${S.userMsg ? `<p class="shelp" role="status" style="color:${S.userOk ? 'var(--accent)' : 'var(--danger)'}">${esc(S.userMsg)}</p>` : ''}
     <h3 class="sh">Avec accès <span class="suse">${withAcc.length}</span></h3>
@@ -1248,7 +1249,7 @@ document.addEventListener('keydown', e => {
 $('#addP').addEventListener('click', () => create('p'));
 $('#addT').addEventListener('click', () => create('t'));
 $('#settingsBtn').addEventListener('click', openSettings);
-$('#mineBtn').addEventListener('click', () => { if(!isAdmin()) return; S.mine = !S.mine; LS.set('pt.mine', S.mine ? '1' : '0'); renderMain(); if(S.open) renderPanel(); });
+$('#mineBtn').addEventListener('click', () => { S.mine = !S.mine; LS.set('pt.mine', S.mine ? '1' : '0'); renderMain(); if(S.open) renderPanel(); });
 scrim.addEventListener('click', closePanel);
 
 panel.addEventListener('click', async e => {
@@ -1535,11 +1536,12 @@ renderTabs(); renderMain();
     setSync('Compte non autorisé.', true); return;
   }
   S.me = {pid: me.data.id, role: me.data.role};
-  S.mine = !isAdmin() || LS.get('pt.mine', '0') === '1';
+  S.mine = LS.get('pt.mine', '0') === '1';
   const db = makeDb(sb);
   S.db = db; S.sb = sb;
   $('#settingsBtn').hidden = !isAdmin();
-  $('#mineBtn').hidden = !isAdmin();
+  $('#mineBtn').hidden = false;
+  if(!canEdit()){ S.readOnly = true; S.err = 'viewer'; setSync('Lecture seule : tu peux consulter les projets et les tâches, mais pas les modifier.'); }
   renderMine();
   loadTimer = setTimeout(() => { setSync('Les données ne sont pas encore joignables. Elles s’afficheront dès que la connexion revient.', true); }, 10000);
   subscribe('projects', S.projects, 'p');
