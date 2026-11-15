@@ -373,6 +373,7 @@ S.cSort = ['asc','name'].includes(LS.get('pt.csort','')) ? LS.get('pt.csort','')
 S.rSort = ['desc','asc','name'].includes(LS.get('pt.rsort','')) ? LS.get('pt.rsort','') : '';
 S.fOwner = LS.get('pt.fowner', '');
 S.fClient = LS.get('pt.fclient', '');
+S.fPOwner = LS.get('pt.fpowner', '');
 S.wSort =['desc','many','few'].includes(LS.get('pt.wsort','')) ? LS.get('pt.wsort','') : '';
 ['pSort','tSort'].forEach(sk => { try { const s = JSON.parse(LS.get('pt.' + sk.toLowerCase(), 'null')); if(s && typeof s.k === 'string' && (s.dir === 1 || s.dir === -1)) S[sk] = s; } catch(e){} });
 if(!TVIEWS.some(v=>v[0]===S.tView)) S.tView='parprojet';
@@ -559,13 +560,31 @@ function clientFilter(all, f){
       <optgroup label="Clients">${cl.map(c => `<option value="${esc(c)}"${f === c ? ' selected' : ''}>${esc(c)} (${counts.get(c)})</option>`).join('')}</optgroup>
     </select>${f ? `<button type="button" class="btn" id="fClientClear">Effacer le filtre</button>` : ''}</div>`;
 }
+function projOwnerFilter(all, f){
+  const counts = new Map(); let none = 0;
+  all.forEach(p => { const o = p.owners || []; if(!o.length) none++; o.forEach(id => counts.set(id, (counts.get(id) || 0) + 1)); });
+  const ppl = [...counts.keys()].map(id => ({id, name: personName(id), n: counts.get(id)})).sort((a,b) => a.name.localeCompare(b.name, 'fr', {sensitivity:'base'}));
+  const meOpt = S.me && counts.has(S.me.pid);
+  return `<label for="fPOwner">Responsable</label>
+    <select id="fPOwner"><option value="">Tous (${all.length})</option>
+      ${meOpt ? `<option value="__me"${f === '__me' ? ' selected' : ''}>Moi (${counts.get(S.me.pid)})</option>` : ''}
+      ${none ? `<option value="__none"${f === '__none' ? ' selected' : ''}>Non assigné (${none})</option>` : ''}
+      <optgroup label="Personnes">${ppl.map(p => `<option value="${esc(p.id)}"${f === p.id ? ' selected' : ''}>${esc(p.name)} (${p.n})</option>`).join('')}</optgroup>
+    </select>`;
+}
 function viewProjects(){
   const all = projects();
   if(!all.length) return emptyBox('Aucun projet pour l’instant', 'Crée le premier avec « Nouveau projet ».');
-  let f = S.fClient || '';
+  let f = S.fClient || '', o = S.fPOwner || '';
   if(f === '__none' ? !all.some(p => !p.client) : (f && !all.some(p => p.client === f))) f = '';
-  const ps = !f ? all : f === '__none' ? all.filter(p => !p.client) : all.filter(p => p.client === f);
-  return clientFilter(all, f) + viewProjectsOf(ps);
+  const byClient = !f ? all : f === '__none' ? all.filter(p => !p.client) : all.filter(p => p.client === f);
+  const oid = o === '__me' ? (S.me && S.me.pid) : o;
+  if(o === '__none' ? !byClient.some(p => !(p.owners||[]).length) : (o && !byClient.some(p => (p.owners||[]).includes(oid)))) o = '';
+  const ps = !o ? byClient : o === '__none' ? byClient.filter(p => !(p.owners||[]).length) : byClient.filter(p => (p.owners||[]).includes(oid));
+  const bar = clientFilter(all, f).replace(/(<button type="button" class="btn" id="fClientClear">[^<]*<\/button>)?<\/div>$/, '')
+    + projOwnerFilter(byClient, o)
+    + (f || o ? `<button type="button" class="btn" id="fProjClear">Effacer les filtres</button>` : '') + `</div>`;
+  return bar + (ps.length ? viewProjectsOf(ps) : emptyBox('Aucun projet', 'Aucun projet ne correspond à ces filtres.'));
 }
 function viewProjectsOf(ps){
   switch(S.pView){
@@ -1097,6 +1116,7 @@ function settingsChange(e){
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
   const tab = e.target.closest('[data-pv],[data-tv]');
+  if(e.target.closest('#fProjClear')){ S.fClient = ''; S.fPOwner = ''; LS.set('pt.fclient', ''); LS.set('pt.fpowner', ''); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
   if(e.target.closest('#fClientClear')){ S.fClient = ''; LS.set('pt.fclient', ''); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
   if(e.target.closest('#fOwnerClear')){ S.fOwner = ''; LS.set('pt.fowner', ''); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
   const sd = e.target.closest('[data-sortdir]');
@@ -1113,6 +1133,7 @@ document.addEventListener('click', e => {
   if(op && !e.target.closest('[data-act]')){ const i = op.dataset.open.indexOf(':'); openItem(op.dataset.open.slice(0,i), op.dataset.open.slice(i+1)); }
 });
 document.addEventListener('change', e => {
+  if(e.target.id === 'fPOwner'){ S.fPOwner = e.target.value; LS.set('pt.fpowner', S.fPOwner); renderMain(); const d = $('#fPOwner'); if(d) d.focus(); return; }
   if(e.target.id === 'fClient'){ S.fClient = e.target.value; LS.set('pt.fclient', S.fClient); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
   if(e.target.id === 'fOwner'){ S.fOwner = e.target.value; LS.set('pt.fowner', S.fOwner); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
   if(['dsort','csort','rsort','wsort'].includes(e.target.id)){ const id = e.target.id, k = id[0] + 'Sort';
