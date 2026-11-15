@@ -262,6 +262,17 @@ body{margin:0}
 .maintabs .mc:empty{display:none}
 section.db{margin-top:14px}
 section.db .db-head h2{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.flab{font-size:13px;color:var(--muted);font-weight:500;margin-top:4px}
+.finput{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;max-width:360px;width:100%}
+.authcard input[type=password]{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px}
+.small{font-size:12.5px}
+.linkbtn{border:0;background:none;padding:0;color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer;font:inherit;font-size:12.5px;display:block;margin-top:4px}
+.uform{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 0 2px 20px}
+.uform input{flex:1 1 180px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 8px;font-size:13px}
+.uform input.pwd{flex:1 1 150px}
+.uform select{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 6px}
+.uform.confirm{background:var(--p-red-bg);color:var(--p-red-fg);border-radius:8px;padding:8px 10px;margin-left:20px}
+.uform.confirm span{flex:1 1 220px}
 .sh{margin:6px 0 0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;display:flex;gap:8px;align-items:center}
 .srow input[type=email]{flex:1 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:4px 6px;font-size:12.5px}
 .sx{flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px;padding-left:20px}
@@ -294,7 +305,7 @@ section.db .db-head h2{position:absolute;width:1px;height:1px;overflow:hidden;cl
     </div>
     <div class="titlebar"><h1>Projets et tâches</h1>
       <div class="tactions"><button class="btn" id="mineBtn" type="button" aria-pressed="false" hidden>Tous les projets</button>
-      <span class="who" id="who" hidden><span><strong id="whoName"></strong> <span id="whoEmail"></span></span><button class="btn" id="logout" type="button">Déconnexion</button></span>
+      <span class="who" id="who" hidden><span><strong id="whoName"></strong> <span id="whoEmail"></span></span><button class="btn" id="mypwdBtn" type="button">Mon mot de passe</button><button class="btn" id="logout" type="button">Déconnexion</button></span>
       <button class="btn" id="settingsBtn" type="button" hidden><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h7M12 4h2M2 12h2M7 12h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="10.5" cy="4" r="1.8" stroke="currentColor" stroke-width="1.6"/><circle cx="5.5" cy="12" r="1.8" stroke="currentColor" stroke-width="1.6"/></svg>Paramètres</button></div></div>
     <p class="sync" id="sync" role="status">Chargement des données…</p>
   </div>
@@ -785,11 +796,42 @@ function setSync(text, warn){ const el = $('#sync'); el.textContent = text; el.c
 /* ---------- panel ---------- */
 const panel = $('#panel'), scrim = $('#scrim');
 function openItem(kind, id){ S.open = {kind, id}; S.confirmDel = false; S.newPerson = false; S.newClient = false; renderPanel(); const t = panel.querySelector('.ptitle'); if(t && !t.value) t.focus(); }
-function closePanel(){ S.open = null; panel.hidden = true; scrim.hidden = true; panel.innerHTML = ''; panel.classList.remove('wide'); }
+function closePanel(){ S.open = null; panel.hidden = true; scrim.hidden = true; panel.innerHTML = ''; panel.classList.remove('wide'); S.userMsg = ''; S.uEdit = null; S.pwdMsg = ''; }
+function openMyPassword(){ S.open = {kind:'me'}; S.pwdMsg = ''; renderPanel(); const f = $('#my-pwd1'); if(f) f.focus(); }
+function renderMyPassword(){
+  panel.classList.remove('wide');
+  panel.innerHTML = `
+    <div class="ph"><span class="kind">Mon compte</span>
+      <button class="iconbtn" type="button" data-act="close" aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></div>
+    <form class="pbody" id="myPwdForm">
+      <h2 class="stitle">Changer mon mot de passe</h2>
+      <p class="muted shelp">Connecté en tant que ${esc(S.myEmail || '')}. Choisis un mot de passe d’au moins 8 caractères.</p>
+      <label for="my-pwd1" class="flab">Nouveau mot de passe</label>
+      <input type="password" id="my-pwd1" class="finput" autocomplete="new-password" minlength="8" required>
+      <label for="my-pwd2" class="flab">Confirme le mot de passe</label>
+      <input type="password" id="my-pwd2" class="finput" autocomplete="new-password" minlength="8" required>
+      <div><button class="btn primary" type="submit" id="my-pwd-save">Enregistrer</button></div>
+      <p class="shelp" role="status" style="color:${S.pwdOk ? 'var(--accent)' : 'var(--danger)'}">${esc(S.pwdMsg || '')}</p>
+    </form>`;
+  panel.hidden = false; scrim.hidden = false;
+  $('#myPwdForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const a = $('#my-pwd1').value, b = $('#my-pwd2').value;
+    S.pwdOk = false;
+    if(a.length < 8){ S.pwdMsg = 'Le mot de passe doit faire au moins 8 caractères.'; renderMyPassword(); return; }
+    if(a !== b){ S.pwdMsg = 'Les deux mots de passe ne sont pas identiques.'; renderMyPassword(); return; }
+    $('#my-pwd-save').disabled = true;
+    const r = await S.sb.auth.updateUser({password: a});
+    S.pwdOk = !r.error;
+    S.pwdMsg = r.error ? (/different from the old/i.test(r.error.message || '') ? 'Choisis un mot de passe différent de l’actuel.' : 'Impossible d’enregistrer : ' + r.error.message) : 'Mot de passe modifié. Utilise-le à ta prochaine connexion.';
+    renderMyPassword();
+  });
+}
 function opts(list, cur, empty){ return (empty != null ? `<option value="">${esc(empty)}</option>` : '') + list.map(o => `<option value="${esc(o.v)}"${o.v===cur?' selected':''}>${esc(o.l)}</option>`).join(''); }
 function renderPanel(){
   if(!S.open){ closePanel(); return; }
   if(S.open.kind === 's'){ renderSettings(); return; }
+  if(S.open.kind === 'me'){ renderMyPassword(); return; }
   panel.classList.remove('wide');
   const {kind, id} = S.open; const map = kind === 'p' ? S.projects : S.tasks; const it = map.get(id);
   if(!it){ closePanel(); return; }
@@ -963,13 +1005,24 @@ function renderSettings(){
     const all = [...S.people.values()].sort(byName);
     const acc = p => S.users.get(p.id);
     const withAcc = all.filter(acc), without = all.filter(p => !acc(p));
-    const row = p => { const u = acc(p) || {}, self = S.me && p.id === S.me.pid;
-      return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${esc(p.id)}" aria-label="Nom">
-        <select data-ur="${esc(p.id)}" aria-label="Accès de ${esc(p.name||'')}"${self ? ' disabled title="Tu ne peux pas retirer ton propre accès administrateur"' : ''}>
-          <option value=""${!u.role ? ' selected' : ''}>Pas d’accès</option><option value="member"${u.role === 'member' ? ' selected' : ''}>Membre</option><option value="admin"${u.role === 'admin' ? ' selected' : ''}>Administrateur</option></select>
-        <div class="sx"><input type="email" value="${esc(u.email||'')}" data-ue="${esc(p.id)}" placeholder="Adresse email de connexion" aria-label="Email de ${esc(p.name||'')}"${self ? ' disabled' : ''}>${u.role && !self ? `<button class="btn" type="button" data-sact="invite" data-id="${esc(p.id)}">Envoyer le lien de connexion</button>` : ''}</div></div>`; };
-    body = `<p class="muted shelp">Les responsables, pilotes et créas peuvent se connecter à l’application. Un <strong>membre</strong> ne voit que les projets où il est responsable, pilote ou créa, et les tâches de ces projets ou dont il est responsable. Un <strong>administrateur</strong> voit tout et gère les paramètres.</p>
-    <p class="muted shelp">Pour donner accès : saisis l’email de la personne, choisis son accès, puis clique sur « Envoyer le lien de connexion ». Elle peut aussi ouvrir le site et saisir elle-même son email. Le service d’envoi gratuit est limité à quelques emails par heure.</p>
+    const ed = S.uEdit || {}, busy = S.uBusy;
+    const roleOpts = r => `<option value="member"${r === 'member' ? ' selected' : ''}>Membre</option><option value="admin"${r === 'admin' ? ' selected' : ''}>Administrateur</option>`;
+    const pwdField = pid => `<input type="text" class="pwd mono" id="u-pwd" value="${esc(ed.pwd||'')}" placeholder="Mot de passe (8 caractères min.)" autocomplete="new-password" aria-label="Mot de passe" spellcheck="false"><button class="btn" type="button" data-sact="ugen" data-id="${esc(pid)}">Générer</button>`;
+    const row = p => { const u = acc(p), self = S.me && p.id === S.me.pid, id = esc(p.id), dis = busy ? ' disabled' : '';
+      let extra = '';
+      if(ed.pid === p.id && ed.mode === 'create') extra = `<div class="uform"><input type="email" id="u-email" value="${esc(ed.email||'')}" placeholder="Adresse email" autocomplete="off" aria-label="Adresse email">${pwdField(p.id)}
+          <select id="u-role" aria-label="Rôle">${roleOpts(ed.role || 'member')}</select>
+          <button class="btn primary" type="button" data-sact="usave" data-id="${id}"${dis}>Créer le compte</button><button class="btn" type="button" data-sact="ucancel">Annuler</button></div>`;
+      else if(ed.pid === p.id && ed.mode === 'pwd') extra = `<div class="uform">${pwdField(p.id)}<button class="btn primary" type="button" data-sact="usave" data-id="${id}"${dis}>Enregistrer le mot de passe</button><button class="btn" type="button" data-sact="ucancel">Annuler</button></div>`;
+      else if(ed.pid === p.id && ed.mode === 'del') extra = `<div class="uform confirm"><span>Supprimer le compte de ${esc(p.name||'cette personne')} ? Elle ne pourra plus se connecter. Ses projets et tâches ne changent pas.</span><button class="btn" type="button" data-sact="ucancel">Annuler</button><button class="btn danger" type="button" data-sact="usave" data-id="${id}"${dis}>Supprimer</button></div>`;
+      if(u) return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${id}" aria-label="Nom">
+        <select data-urole="${id}" aria-label="Rôle de ${esc(p.name||'')}"${self || busy ? ' disabled' : ''}${self ? ' title="Tu ne peux pas modifier ton propre rôle"' : ''}>${roleOpts(u.role)}</select>
+        <div class="sx"><input type="email" value="${esc(u.email)}" data-uemail="${id}" aria-label="Email de ${esc(p.name||'')}"${self || busy ? ' disabled' : ''}>
+          ${ed.pid === p.id ? '' : `<button class="btn" type="button" data-sact="upwd" data-id="${id}"${dis}>${self ? 'Mon mot de passe' : 'Nouveau mot de passe'}</button>${self ? '' : `<button class="btn danger" type="button" data-sact="udel" data-id="${id}"${dis}>Supprimer le compte</button>`}`}</div>${extra}</div>`;
+      return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${id}" aria-label="Nom">
+        ${ed.pid === p.id ? '' : `<span class="sact"><button class="btn" type="button" data-sact="ucreate" data-id="${id}"${dis}>Créer un compte</button></span>`}${extra}</div>`; };
+    body = `<p class="muted shelp">Chaque compte se connecte avec son <strong>email et son mot de passe</strong>. Un <strong>membre</strong> ne voit que les projets où il est responsable, pilote ou créa, et les tâches de ces projets ou dont il est responsable. Un <strong>administrateur</strong> voit tout et gère les paramètres et les comptes.</p>
+    <p class="muted shelp">Pour créer un compte : « Créer un compte », saisis l’email, un mot de passe provisoire (ou « Générer »), choisis le rôle, puis transmets l’email et le mot de passe à la personne. Elle pourra ensuite le changer avec « Mon mot de passe ».</p>
     ${S.userMsg ? `<p class="shelp" role="status" style="color:${S.userOk ? 'var(--accent)' : 'var(--danger)'}">${esc(S.userMsg)}</p>` : ''}
     <h3 class="sh">Avec accès <span class="suse">${withAcc.length}</span></h3>
     <div class="slist">${withAcc.map(row).join('') || '<p class="muted shelp">Personne pour l’instant.</p>'}</div>
@@ -1031,23 +1084,31 @@ function settingsCount(k){
   if(ROLES[k]) return [...S.people.values()].filter(p => inRole(p, k)).length;
   return '';
 }
-async function saveAccess(pid){
-  if(!isAdmin() || !S.db || (S.me && pid === S.me.pid)) return;
-  const q = s => panel.querySelector(`[${s}="${CSS.escape(pid)}"]`);
-  const sel = q('data-ur'), inp = q('data-ue');
-  const role = sel ? sel.value : '', email = (inp ? inp.value : '').trim().toLowerCase();
-  const cur = S.users.get(pid);
-  S.userMsg = ''; S.userOk = false;
-  if(!role){
-    if(cur){ S.users.delete(pid); renderPanel(); await enqueue('app_users/' + pid, () => S.db.doc('app_users/' + pid).delete()); }
-    return;
-  }
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ S.userMsg = 'Saisis une adresse email valide avant de choisir un accès.'; renderPanel(); return; }
-  if([...S.users.values()].some(u => u.id !== pid && u.email === email)){ S.userMsg = 'Cette adresse email est déjà utilisée par une autre personne.'; renderPanel(); return; }
-  if(cur && cur.email === email && cur.role === role) return;
-  S.users.set(pid, {id:pid, email, role});
+async function adminCall(body){
+  if(!S.sb) return {ok:false, msg:'Non connecté.'};
+  try {
+    const {data, error} = await S.sb.functions.invoke('admin-users', {body});
+    if(error){
+      let msg = error.message || 'Erreur inattendue.';
+      try { const j = await error.context.json(); if(j && j.error) msg = j.error; } catch(_){}
+      return {ok:false, msg};
+    }
+    if(data && data.error) return {ok:false, msg:data.error};
+    return {ok:true};
+  } catch(e){ return {ok:false, msg:'Le serveur ne répond pas. Vérifie ta connexion.'}; }
+}
+function genPassword(){
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const a = new Uint32Array(12); crypto.getRandomValues(a);
+  return [...a].map(n => abc[n % abc.length]).join('');
+}
+async function runUserAction(body, okMsg){
+  S.uBusy = true; S.userMsg = 'Enregistrement…'; S.userOk = true; renderPanel();
+  const r = await adminCall(body);
+  S.uBusy = false; S.userOk = r.ok; S.userMsg = r.ok ? okMsg : r.msg;
+  if(r.ok){ S.uEdit = null; (S.reloaders || []).forEach(f => f()); }
   renderPanel();
-  await enqueue('app_users/' + pid, () => S.db.doc('app_users/' + pid).set({email, role}));
+  return r.ok;
 }
 function settingsClick(e){
   const st = e.target.closest('[data-st]');
@@ -1071,18 +1132,34 @@ function settingsClick(e){
     if(ex){ if(!inRole(ex, f)) patchPerson(ex.id, {roles:[...(ex.roles||[]), f]}); }
     else addPerson(name, [f]);
   }
-  else if(a === 'invite'){
-    const u = S.users.get(b.dataset.id), p = S.people.get(b.dataset.id); if(!u || !S.sb) return;
-    b.disabled = true; b.textContent = 'Envoi…';
-    S.sb.auth.signInWithOtp({email: u.email, options: {emailRedirectTo: location.origin + location.pathname}}).then(r => {
-      const err = r && r.error;
-      S.userOk = !err;
-      S.userMsg = !err ? `Lien de connexion envoyé à ${u.email}${p && p.name ? ' (' + p.name + ')' : ''}. Dis-lui de vérifier aussi ses courriers indésirables.`
-        : (err.status === 429 || /rate limit/i.test(err.message || '')) ? 'Limite d’envoi d’emails atteinte. Réessaie dans environ une heure.'
-        : 'L’email n’a pas pu être envoyé : ' + err.message;
-      renderPanel();
-    });
-    return;
+  else if(['ucreate','upwd','udel','ucancel','ugen','usave'].includes(a)){
+    const pid = b.dataset.id, keep = () => { const e = S.uEdit; if(!e) return; const em = $('#u-email'), pw = $('#u-pwd'), ro = $('#u-role'); if(em) e.email = em.value; if(pw) e.pwd = pw.value; if(ro) e.role = ro.value; };
+    S.userMsg = '';
+    if(a === 'ucancel'){ S.uEdit = null; renderPanel(); return; }
+    if(a === 'ucreate'){ S.uEdit = {pid, mode:'create', email:'', pwd:genPassword(), role:'member'}; renderPanel(); const em = $('#u-email'); if(em) em.focus(); return; }
+    if(a === 'upwd'){
+      if(S.me && pid === S.me.pid){ openMyPassword(); return; }
+      S.uEdit = {pid, mode:'pwd', pwd:genPassword()}; renderPanel(); const pw = $('#u-pwd'); if(pw) pw.select(); return;
+    }
+    if(a === 'udel'){ S.uEdit = {pid, mode:'del'}; renderPanel(); return; }
+    if(a === 'ugen'){ keep(); S.uEdit.pwd = genPassword(); renderPanel(); return; }
+    if(a === 'usave'){
+      keep(); const e = S.uEdit; if(!e) return; const p = S.people.get(e.pid), nm = p && p.name ? p.name : 'la personne';
+      if(e.mode === 'create'){
+        const email = (e.email || '').trim().toLowerCase();
+        if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ S.userOk = false; S.userMsg = 'Saisis une adresse email valide.'; renderPanel(); return; }
+        if((e.pwd || '').length < 8){ S.userOk = false; S.userMsg = 'Le mot de passe doit faire au moins 8 caractères.'; renderPanel(); return; }
+        const pwd = e.pwd;
+        runUserAction({action:'create', person_id:e.pid, email, password:pwd, role:e.role || 'member'}, `Compte créé pour ${nm}. Transmets-lui : email ${email} · mot de passe ${pwd}`);
+      } else if(e.mode === 'pwd'){
+        if((e.pwd || '').length < 8){ S.userOk = false; S.userMsg = 'Le mot de passe doit faire au moins 8 caractères.'; renderPanel(); return; }
+        const pwd = e.pwd;
+        runUserAction({action:'set_password', person_id:e.pid, password:pwd}, `Nouveau mot de passe pour ${nm} : ${pwd}`);
+      } else if(e.mode === 'del'){
+        runUserAction({action:'delete', person_id:e.pid}, `Le compte de ${nm} est supprimé.`);
+      }
+      return;
+    }
   }
   else if(a === 'adduser'){
     if(!name) return;
@@ -1095,7 +1172,14 @@ function settingsClick(e){
 }
 function settingsChange(e){
   const el = e.target; if(!S.db || S.readOnly) return;
-  if(el.dataset.ur != null || el.dataset.ue != null){ saveAccess(el.dataset.ur != null ? el.dataset.ur : el.dataset.ue); return; }
+  if(el.dataset.urole != null || el.dataset.uemail != null){
+    const pid = el.dataset.urole != null ? el.dataset.urole : el.dataset.uemail, cur = S.users.get(pid), p = S.people.get(pid); if(!cur) return;
+    const body = {action:'update', person_id:pid};
+    if(el.dataset.urole != null){ if(el.value === cur.role) return; body.role = el.value; }
+    else { const v = el.value.trim().toLowerCase(); if(v === cur.email) return; body.email = v; }
+    runUserAction(body, `Compte de ${p && p.name ? p.name : 'la personne'} mis à jour.`);
+    return;
+  }
   if(el.id === 's-addexist'){ const p = S.people.get(el.value); if(p) patchPerson(p.id, {roles:[...(p.roles||[]), S.sTab]}); renderPanel(); return; }
   if(el.dataset.ps){
     const i = +el.dataset.i, l = PSTAT.map(s => ({...s})), s = l[i]; if(!s) return;
@@ -1170,6 +1254,7 @@ scrim.addEventListener('click', closePanel);
 panel.addEventListener('click', async e => {
   if(!S.open) return;
   if(S.open.kind === 's'){ settingsClick(e); return; }
+  if(S.open.kind === 'me'){ if(e.target.closest('[data-act="close"]')) closePanel(); return; }
   const {kind, id} = S.open; const it = mapOf(kind).get(id); if(!it) return;
   const act = e.target.closest('[data-act]');
   if(act){
@@ -1205,6 +1290,7 @@ async function commitClient(){
 panel.addEventListener('change', async e => {
   if(!S.open) return;
   if(S.open.kind === 's'){ settingsChange(e); return; }
+  if(S.open.kind === 'me') return;
   const {kind, id} = S.open; const it = mapOf(kind).get(id); if(!it) return;
   const el = e.target;
   if(el.dataset.addperson){
@@ -1370,20 +1456,36 @@ function showAuth(html){
 }
 function loginForm(sb, msg){
   showAuth(`<form id="loginForm" class="authcard"><h2>Connexion</h2>
-    <p class="muted">Entre ton adresse email : tu recevras un lien de connexion.</p>
-    <label for="loginEmail" class="sr">Adresse email</label>
-    <input type="email" id="loginEmail" required autocomplete="email" placeholder="prenom@entreprise.com">
-    <button class="btn primary" type="submit">Recevoir le lien</button>
-    <p class="muted" id="loginMsg" role="status">${esc(msg||'')}</p></form>`);
+    <label for="loginEmail" class="flab">Adresse email</label>
+    <input type="email" id="loginEmail" required autocomplete="username" placeholder="prenom@entreprise.com">
+    <label for="loginPwd" class="flab">Mot de passe</label>
+    <input type="password" id="loginPwd" required autocomplete="current-password">
+    <button class="btn primary" type="submit" id="loginBtn">Se connecter</button>
+    <p class="muted" id="loginMsg" role="status">${esc(msg||'')}</p>
+    <p class="muted small">Mot de passe oublié ? Demande à un administrateur de t’en définir un nouveau.
+      <button type="button" class="linkbtn" id="loginLink">Ou recevoir un lien de connexion par email</button></p></form>`);
   $('#loginForm').addEventListener('submit', async e => {
-    e.preventDefault(); const email = $('#loginEmail').value.trim(); if(!email) return;
+    e.preventDefault();
+    const email = $('#loginEmail').value.trim(), password = $('#loginPwd').value; if(!email || !password) return;
+    $('#loginBtn').disabled = true; $('#loginMsg').textContent = 'Connexion…';
+    const r = await sb.auth.signInWithPassword({email, password});
+    $('#loginBtn').disabled = false;
+    if(r.error){
+      $('#loginMsg').textContent = /invalid login|invalid credentials/i.test(r.error.message || '')
+        ? 'Email ou mot de passe incorrect.'
+        : (r.error.status === 429 ? 'Trop de tentatives. Patiente quelques minutes.' : 'Connexion impossible : ' + r.error.message);
+    }
+  });
+  $('#loginLink').addEventListener('click', async () => {
+    const email = $('#loginEmail').value.trim();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ $('#loginMsg').textContent = 'Saisis d’abord ton adresse email.'; $('#loginEmail').focus(); return; }
     $('#loginMsg').textContent = 'Envoi en cours…';
-    const r = await sb.auth.signInWithOtp({email, options:{emailRedirectTo: location.origin + location.pathname}});
+    const r = await sb.auth.signInWithOtp({email, options:{emailRedirectTo: location.origin + location.pathname, shouldCreateUser:false}});
     $('#loginMsg').textContent = !r.error
-      ? 'C’est envoyé. Ouvre le dernier email reçu et clique sur le lien pour te connecter (les liens plus anciens ne marchent plus).'
+      ? 'Si ce compte existe, un lien vient d’être envoyé. Ouvre le dernier email reçu.'
       : (r.error.status === 429 || /rate limit/i.test(r.error.message || ''))
-        ? 'Trop de liens demandés : Supabase limite l’envoi d’emails. Réessaie dans une heure environ.'
-        : 'Le lien n’a pas pu être envoyé : ' + r.error.message;
+        ? 'Trop de liens demandés. Réessaie dans une heure environ.'
+        : 'Si ce compte existe, un lien vient d’être envoyé. Ouvre le dernier email reçu.';
   });
   setSync('Connecte-toi pour voir et modifier tes projets.');
 }
@@ -1425,6 +1527,8 @@ renderTabs(); renderMain();
   if(location.hash && /access_token|error/.test(location.hash)) history.replaceState(null, '', location.pathname);
   const who = $('#who'); who.hidden = false; $('#whoEmail').textContent = session.user.email || '';
   $('#logout').addEventListener('click', () => sb.auth.signOut());
+  S.myEmail = session.user.email || '';
+  $('#mypwdBtn').addEventListener('click', openMyPassword);
   const me = await sb.from('app_users').select('id,role').eq('email', String(session.user.email || '').toLowerCase()).maybeSingle();
   if(me.error || !me.data){
     showAuth(`<div class="authcard"><h2>Accès non autorisé</h2><p class="muted">Le compte ${esc(session.user.email||'')} n’a pas encore accès à ces projets. Demande à l’administrateur de l’ajouter.</p></div>`);
