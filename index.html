@@ -193,6 +193,7 @@ table.grid{border-collapse:collapse;width:100%;font-size:13.5px}
 .props > label,.props > .lab{color:var(--muted);font-size:13px;padding-top:2px}
 .props select,.props input[type=date],.props input[type=text]{border:1px solid var(--line);background:var(--bg);border-radius:7px;padding:5px 8px;max-width:100%}
 .props .inline{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.props input.combo{flex:1 1 170px;min-width:0;width:100%}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:2px 4px 2px 8px;border-radius:999px;background:var(--hover);font-size:12.5px}
 .chip button{border:0;background:none;cursor:pointer;color:var(--muted);width:18px;height:18px;border-radius:50%;line-height:1}
 .chip button:hover{background:var(--line);color:var(--fg)}
@@ -728,9 +729,8 @@ function renderPanel(){
     const ids = it[field] || [];
     const free = [...S.people.values()].filter(p => !ids.includes(p.id) && inRole(p, field)).sort((a,b) => String(a.name).localeCompare(String(b.name), 'fr'));
     return `<div class="inline">${ids.map(o => `<span class="chip">${avatar(o)}${esc(personName(o))}${ro?'':`<button type="button" data-rmperson="${esc(o)}" data-pf="${field}" aria-label="Retirer ${esc(personName(o))}">×</button>`}</span>`).join('')}
-    ${ro ? '' : (S.newPerson === field
-      ? `<input type="text" id="f-newperson" placeholder="Nom de la personne" aria-label="Nom de la nouvelle personne"><button class="btn" type="button" data-act="addperson" data-pf="${field}">Ajouter</button>`
-      : `<select id="f-add-${field}" data-addperson="${field}" aria-label="Ajouter une personne"><option value="">Ajouter…</option>${free.map(p => `<option value="${esc(p.id)}">${esc(p.name||'Sans nom')}</option>`).join('')}${isAdmin() ? '<option value="__new">Nouvelle personne…</option>' : ''}</select>`)}
+    ${ro ? '' : `<input type="text" class="combo" id="f-add-${field}" list="dl-${field}" data-addperson="${field}" placeholder="${isAdmin() ? 'Tape un nom (nouveau = créé)' : 'Tape un nom…'}" autocomplete="off" aria-label="Ajouter une personne">
+      <datalist id="dl-${field}">${free.map(p => `<option value="${esc(p.name||'')}"></option>`).join('')}</datalist>`}
   </div>`;
   };
   const blockedBy = (it.blockedBy||[]).filter(b => map.has(b));
@@ -743,9 +743,8 @@ function renderPanel(){
     const cl = clientList().sort((a,b) => a.n.localeCompare(b.n, 'fr', {sensitivity:'base'}));
     props = `
       <label for="f-code">Code projet</label><div><input type="text" id="f-code" data-field="code" value="${esc(it.code||'')}" placeholder="ex. INW-2611" autocomplete="off"></div>
-      <label for="f-client">Client</label><div class="inline">${S.newClient
-        ? `<input type="text" id="f-newclient" placeholder="Nom du client" aria-label="Nom du nouveau client"><button class="btn" type="button" data-act="addclient">Ajouter</button>`
-        : `<select id="f-client">${opts(cl.map(c=>({v:c.n,l:c.n})), it.client||'', '—')}${ro || !isAdmin() ? '' : '<option value="__new">Nouveau client…</option>'}</select>`}</div>
+      <label for="f-client">Client</label><div class="inline"><input type="text" class="combo" id="f-client" list="dl-client" value="${esc(it.client||'')}" placeholder="${isAdmin() ? 'Tape un client (nouveau = créé)' : 'Tape un client…'}" autocomplete="off">
+        <datalist id="dl-client">${cl.map(c => `<option value="${esc(c.n)}"></option>`).join('')}</datalist></div>
       <label for="f-status">État d’avancement</label><div><select id="f-status" data-field="status">${opts(PSTAT.map(s=>({v:s.n,l:s.n})), it.status)}</select></div>
       <span class="lab">Responsable</span>${peopleCtl('owners')}
       <span class="lab">Pilote de projet</span>${peopleCtl('pilots')}
@@ -1120,16 +1119,37 @@ panel.addEventListener('change', async e => {
   const {kind, id} = S.open; const it = mapOf(kind).get(id); if(!it) return;
   const el = e.target;
   if(el.dataset.addperson){
-    const pf = el.dataset.addperson;
-    if(el.value === '__new'){ S.newPerson = pf; renderPanel(); }
-    else if(el.value){ await patch(kind, id, {[pf]:[...(it[pf]||[]), el.value]}); renderPanel(); }
+    const pf = el.dataset.addperson, v = el.value.trim(); if(!v) return;
+    const lc = v.toLowerCase(), all = [...S.people.values()];
+    const p = all.find(x => inRole(x, pf) && (x.name||'').toLowerCase() === lc) || all.find(x => (x.name||'').toLowerCase() === lc);
+    let pid = null;
+    if(p){
+      pid = p.id;
+      if(!inRole(p, pf) && isAdmin()) patchPerson(p.id, {roles:[...(p.roles||[]), pf]});
+    } else if(isAdmin()){
+      pid = await addPerson(v, [pf]);
+    } else {
+      setSync(`« ${v} » n’est pas dans la liste. Demande à un administrateur de l’ajouter.`, true);
+      el.value = ''; return;
+    }
+    if(pid && !(it[pf]||[]).includes(pid)) await patch(kind, id, {[pf]:[...(it[pf]||[]), pid]});
+    renderPanel();
+    const nx = panel.querySelector(`[data-addperson="${pf}"]`); if(nx) nx.focus();
     return;
   }
   if(el.id === 'f-addblock'){ if(el.value){ await patch(kind, id, {blockedBy:[...(it.blockedBy||[]), el.value]}); renderPanel(); } return; }
   if(el.id === 'f-client'){
-    if(el.value === '__new'){ S.newClient = true; renderPanel(); }
-    else patch(kind, id, {client: el.value || null});
-    return;
+    const v = el.value.trim();
+    if(!v){ if(it.client) patch(kind, id, {client:null}); return; }
+    const list = clientList(), c = list.find(x => x.n.toLowerCase() === v.toLowerCase());
+    if(c){ if(c.n !== it.client) await patch(kind, id, {client:c.n}); el.value = c.n; return; }
+    if(isAdmin()){
+      saveClients([...list, {n:v, c:PALETTE[list.length % PALETTE.length]}]);
+      await patch(kind, id, {client:v});
+      renderPanel(); return;
+    }
+    setSync(`Le client « ${v} » n’existe pas. Demande à un administrateur de le créer.`, true);
+    el.value = it.client || ''; return;
   }
   const f = el.dataset.field; if(!f) return;
   let v = el.value;
@@ -1149,6 +1169,7 @@ panel.addEventListener('keydown', e => {
     return;
   }
   if(e.key === 'Enter' && (e.target.id === 'f-name' || e.target.id === 'f-code')){ e.preventDefault(); e.target.blur(); }
+  if(e.key === 'Enter' && e.target.classList.contains('combo')){ e.preventDefault(); e.target.dispatchEvent(new Event('change', {bubbles:true})); }
   if(e.key === 'Enter' && e.target.id === 'f-newperson'){ e.preventDefault(); panel.querySelector('[data-act="addperson"]').click(); }
   if(e.key === 'Enter' && e.target.id === 'f-newclient'){ e.preventDefault(); commitClient(); }
 });
