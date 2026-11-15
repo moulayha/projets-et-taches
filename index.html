@@ -967,10 +967,10 @@ function renderSettings(){
       return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${esc(p.id)}" aria-label="Nom">
         <select data-ur="${esc(p.id)}" aria-label="Accès de ${esc(p.name||'')}"${self ? ' disabled title="Tu ne peux pas retirer ton propre accès administrateur"' : ''}>
           <option value=""${!u.role ? ' selected' : ''}>Pas d’accès</option><option value="member"${u.role === 'member' ? ' selected' : ''}>Membre</option><option value="admin"${u.role === 'admin' ? ' selected' : ''}>Administrateur</option></select>
-        <div class="sx"><input type="email" value="${esc(u.email||'')}" data-ue="${esc(p.id)}" placeholder="Adresse email de connexion" aria-label="Email de ${esc(p.name||'')}"${self ? ' disabled' : ''}></div></div>`; };
+        <div class="sx"><input type="email" value="${esc(u.email||'')}" data-ue="${esc(p.id)}" placeholder="Adresse email de connexion" aria-label="Email de ${esc(p.name||'')}"${self ? ' disabled' : ''}>${u.role && !self ? `<button class="btn" type="button" data-sact="invite" data-id="${esc(p.id)}">Envoyer le lien de connexion</button>` : ''}</div></div>`; };
     body = `<p class="muted shelp">Les responsables, pilotes et créas peuvent se connecter à l’application. Un <strong>membre</strong> ne voit que les projets où il est responsable, pilote ou créa, et les tâches de ces projets ou dont il est responsable. Un <strong>administrateur</strong> voit tout et gère les paramètres.</p>
-    <p class="muted shelp">Pour donner accès : saisis l’email de la personne, puis choisis son accès. Elle se connecte ensuite avec un lien reçu à cette adresse.</p>
-    ${S.userMsg ? `<p class="shelp" role="status" style="color:var(--danger)">${esc(S.userMsg)}</p>` : ''}
+    <p class="muted shelp">Pour donner accès : saisis l’email de la personne, choisis son accès, puis clique sur « Envoyer le lien de connexion ». Elle peut aussi ouvrir le site et saisir elle-même son email. Le service d’envoi gratuit est limité à quelques emails par heure.</p>
+    ${S.userMsg ? `<p class="shelp" role="status" style="color:${S.userOk ? 'var(--accent)' : 'var(--danger)'}">${esc(S.userMsg)}</p>` : ''}
     <h3 class="sh">Avec accès <span class="suse">${withAcc.length}</span></h3>
     <div class="slist">${withAcc.map(row).join('') || '<p class="muted shelp">Personne pour l’instant.</p>'}</div>
     <h3 class="sh">Sans accès <span class="suse">${without.length}</span></h3>
@@ -1037,7 +1037,7 @@ async function saveAccess(pid){
   const sel = q('data-ur'), inp = q('data-ue');
   const role = sel ? sel.value : '', email = (inp ? inp.value : '').trim().toLowerCase();
   const cur = S.users.get(pid);
-  S.userMsg = '';
+  S.userMsg = ''; S.userOk = false;
   if(!role){
     if(cur){ S.users.delete(pid); renderPanel(); await enqueue('app_users/' + pid, () => S.db.doc('app_users/' + pid).delete()); }
     return;
@@ -1070,6 +1070,19 @@ function settingsClick(e){
     const ex = [...S.people.values()].find(p => same(p.name||'', name));
     if(ex){ if(!inRole(ex, f)) patchPerson(ex.id, {roles:[...(ex.roles||[]), f]}); }
     else addPerson(name, [f]);
+  }
+  else if(a === 'invite'){
+    const u = S.users.get(b.dataset.id), p = S.people.get(b.dataset.id); if(!u || !S.sb) return;
+    b.disabled = true; b.textContent = 'Envoi…';
+    S.sb.auth.signInWithOtp({email: u.email, options: {emailRedirectTo: location.origin + location.pathname}}).then(r => {
+      const err = r && r.error;
+      S.userOk = !err;
+      S.userMsg = !err ? `Lien de connexion envoyé à ${u.email}${p && p.name ? ' (' + p.name + ')' : ''}. Dis-lui de vérifier aussi ses courriers indésirables.`
+        : (err.status === 429 || /rate limit/i.test(err.message || '')) ? 'Limite d’envoi d’emails atteinte. Réessaie dans environ une heure.'
+        : 'L’email n’a pas pu être envoyé : ' + err.message;
+      renderPanel();
+    });
+    return;
   }
   else if(a === 'adduser'){
     if(!name) return;
