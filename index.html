@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Projets et tâches</title>
+<title>WEEKLY STATUS · Projets et tâches</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -53,6 +53,8 @@ body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px
 button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
+.brandbar{max-width:1180px;margin:0 auto;height:100%;display:flex;align-items:flex-start;justify-content:flex-end;padding:22px max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px))}
+.brand{font-family:var(--display);font-weight:700;font-size:clamp(22px,3.6vw,34px);letter-spacing:.14em;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.18);line-height:1}
 .cover{height:132px;background:
   repeating-linear-gradient(90deg, color-mix(in srgb, var(--accent-fg) 14%, transparent) 0 1px, transparent 1px 28px),
   repeating-linear-gradient(0deg, color-mix(in srgb, var(--accent-fg) 14%, transparent) 0 1px, transparent 1px 28px),
@@ -297,7 +299,7 @@ section.db .db-head h2{position:absolute;width:1px;height:1px;overflow:hidden;cl
 </head>
 <body>
 
-<header class="cover" aria-hidden="true"></header>
+<header class="cover"><div class="brandbar"><span class="brand">WEEKLY STATUS</span></div></header>
 <main class="wrap">
   <div class="page-head">
     <div class="page-icon" aria-hidden="true">
