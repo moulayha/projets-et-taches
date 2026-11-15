@@ -372,6 +372,7 @@ S.dSort = ['desc','asc','name'].includes(LS.get('pt.dsort','')) ? LS.get('pt.dso
 S.cSort = ['asc','name'].includes(LS.get('pt.csort','')) ? LS.get('pt.csort','') : '';
 S.rSort = ['desc','asc','name'].includes(LS.get('pt.rsort','')) ? LS.get('pt.rsort','') : '';
 S.fOwner = LS.get('pt.fowner', '');
+S.fClient = LS.get('pt.fclient', '');
 S.wSort =['desc','many','few'].includes(LS.get('pt.wsort','')) ? LS.get('pt.wsort','') : '';
 ['pSort','tSort'].forEach(sk => { try { const s = JSON.parse(LS.get('pt.' + sk.toLowerCase(), 'null')); if(s && typeof s.k === 'string' && (s.dir === 1 || s.dir === -1)) S[sk] = s; } catch(e){} });
 if(!TVIEWS.some(v=>v[0]===S.tView)) S.tView='parprojet';
@@ -548,9 +549,25 @@ function tCard(t){
 }
 
 /* ---------- project views ---------- */
+function clientFilter(all, f){
+  const counts = new Map(); let none = 0;
+  all.forEach(p => { if(p.client) counts.set(p.client, (counts.get(p.client) || 0) + 1); else none++; });
+  const cl = [...counts.keys()].sort((a,b) => a.localeCompare(b, 'fr', {sensitivity:'base'}));
+  return `<div class="sortbar filterbar"><label for="fClient">Client</label>
+    <select id="fClient"><option value="">Tous (${all.length})</option>
+      ${none ? `<option value="__none"${f === '__none' ? ' selected' : ''}>Sans client (${none})</option>` : ''}
+      <optgroup label="Clients">${cl.map(c => `<option value="${esc(c)}"${f === c ? ' selected' : ''}>${esc(c)} (${counts.get(c)})</option>`).join('')}</optgroup>
+    </select>${f ? `<button type="button" class="btn" id="fClientClear">Effacer le filtre</button>` : ''}</div>`;
+}
 function viewProjects(){
-  const ps = projects();
-  if(!ps.length) return emptyBox('Aucun projet pour l’instant', 'Crée le premier avec « Nouveau projet ».');
+  const all = projects();
+  if(!all.length) return emptyBox('Aucun projet pour l’instant', 'Crée le premier avec « Nouveau projet ».');
+  let f = S.fClient || '';
+  if(f === '__none' ? !all.some(p => !p.client) : (f && !all.some(p => p.client === f))) f = '';
+  const ps = !f ? all : f === '__none' ? all.filter(p => !p.client) : all.filter(p => p.client === f);
+  return clientFilter(all, f) + viewProjectsOf(ps);
+}
+function viewProjectsOf(ps){
   switch(S.pView){
     case 'actifs': {
       const groups = PSTAT.filter(s => s.g === 'prog').map(s => ({s, items: ps.filter(p => p.status === s.n)})).filter(g => g.items.length);
@@ -1080,6 +1097,7 @@ function settingsChange(e){
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
   const tab = e.target.closest('[data-pv],[data-tv]');
+  if(e.target.closest('#fClientClear')){ S.fClient = ''; LS.set('pt.fclient', ''); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
   if(e.target.closest('#fOwnerClear')){ S.fOwner = ''; LS.set('pt.fowner', ''); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
   const sd = e.target.closest('[data-sortdir]');
   if(sd){ const sk = sd.dataset.sortdir === 't' ? 'tSort' : 'pSort'; if(S[sk]){ S[sk] = {k:S[sk].k, dir:-S[sk].dir}; LS.set('pt.' + sk.toLowerCase(), JSON.stringify(S[sk])); renderMain(); const b = document.querySelector(`[data-sortdir="${sd.dataset.sortdir}"]`); if(b) b.focus(); } return; }
@@ -1095,6 +1113,7 @@ document.addEventListener('click', e => {
   if(op && !e.target.closest('[data-act]')){ const i = op.dataset.open.indexOf(':'); openItem(op.dataset.open.slice(0,i), op.dataset.open.slice(i+1)); }
 });
 document.addEventListener('change', e => {
+  if(e.target.id === 'fClient'){ S.fClient = e.target.value; LS.set('pt.fclient', S.fClient); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
   if(e.target.id === 'fOwner'){ S.fOwner = e.target.value; LS.set('pt.fowner', S.fOwner); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
   if(['dsort','csort','rsort','wsort'].includes(e.target.id)){ const id = e.target.id, k = id[0] + 'Sort';
     S[k] = e.target.value; LS.set('pt.' + id, S[k]); renderMain(); const d = document.getElementById(id); if(d) d.focus(); return; }
