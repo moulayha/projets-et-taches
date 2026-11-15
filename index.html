@@ -1158,7 +1158,11 @@ function loginForm(sb, msg){
     e.preventDefault(); const email = $('#loginEmail').value.trim(); if(!email) return;
     $('#loginMsg').textContent = 'Envoi en cours…';
     const r = await sb.auth.signInWithOtp({email, options:{emailRedirectTo: location.origin + location.pathname}});
-    $('#loginMsg').textContent = r.error ? 'Le lien n’a pas pu être envoyé : ' + r.error.message : 'C’est envoyé. Ouvre l’email et clique sur le lien pour te connecter.';
+    $('#loginMsg').textContent = !r.error
+      ? 'C’est envoyé. Ouvre le dernier email reçu et clique sur le lien pour te connecter (les liens plus anciens ne marchent plus).'
+      : (r.error.status === 429 || /rate limit/i.test(r.error.message || ''))
+        ? 'Trop de liens demandés : Supabase limite l’envoi d’emails. Réessaie dans une heure environ.'
+        : 'Le lien n’a pas pu être envoyé : ' + r.error.message;
   });
   setSync('Connecte-toi pour voir et modifier tes projets.');
 }
