@@ -232,6 +232,25 @@ body{margin:0}
 .sadd input{flex:1 1 160px;min-width:0}
 .sw{width:12px;height:12px;border-radius:4px;flex:none}
 .srow[hidden]{display:none}
+.panel.wide{width:min(900px,100%)}
+.sgrid{display:grid;grid-template-columns:220px minmax(0,1fr);flex:1;min-height:0}
+.sgrid .pbody{overflow-y:auto;min-height:0}
+.snav{border-right:1px solid var(--line);padding:10px 8px 20px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;background:color-mix(in srgb, var(--hover) 55%, var(--surface))}
+.snav .sg{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;padding:12px 10px 4px}
+.snav button{display:flex;align-items:center;gap:10px;border:0;background:none;padding:8px 10px;border-radius:8px;cursor:pointer;text-align:left;color:var(--muted);font-weight:500;width:100%}
+.snav button svg{flex:none}
+.snav button:hover{background:var(--hover);color:var(--fg)}
+.snav button[aria-current="page"]{background:var(--surface);color:var(--fg);box-shadow:inset 3px 0 0 var(--accent), 0 1px 2px rgba(0,0,0,.06)}
+.snav button[aria-current="page"] svg{color:var(--accent)}
+.snav .cnt{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.stitle{font-family:var(--display);font-size:22px;margin:0}
+@media (max-width:680px){
+  .sgrid{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+  .snav{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px;gap:4px;scrollbar-width:thin}
+  .snav .sg{display:none}
+  .snav button{width:auto;white-space:nowrap;flex:none}
+  .snav button[aria-current="page"]{box-shadow:inset 0 -2px 0 var(--accent), 0 1px 2px rgba(0,0,0,.06)}
+}
 .sh{margin:6px 0 0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;display:flex;gap:8px;align-items:center}
 .srow input[type=email]{flex:1 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:4px 6px;font-size:12.5px}
 .sx{flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px;padding-left:20px}
@@ -695,11 +714,12 @@ function setSync(text, warn){ const el = $('#sync'); el.textContent = text; el.c
 /* ---------- panel ---------- */
 const panel = $('#panel'), scrim = $('#scrim');
 function openItem(kind, id){ S.open = {kind, id}; S.confirmDel = false; S.newPerson = false; S.newClient = false; renderPanel(); const t = panel.querySelector('.ptitle'); if(t && !t.value) t.focus(); }
-function closePanel(){ S.open = null; panel.hidden = true; scrim.hidden = true; panel.innerHTML = ''; }
+function closePanel(){ S.open = null; panel.hidden = true; scrim.hidden = true; panel.innerHTML = ''; panel.classList.remove('wide'); }
 function opts(list, cur, empty){ return (empty != null ? `<option value="">${esc(empty)}</option>` : '') + list.map(o => `<option value="${esc(o.v)}"${o.v===cur?' selected':''}>${esc(o.l)}</option>`).join(''); }
 function renderPanel(){
   if(!S.open){ closePanel(); return; }
   if(S.open.kind === 's'){ renderSettings(); return; }
+  panel.classList.remove('wide');
   const {kind, id} = S.open; const map = kind === 'p' ? S.projects : S.tasks; const it = map.get(id);
   if(!it){ closePanel(); return; }
   S.panelDirty = false;
@@ -908,13 +928,39 @@ function renderSettings(){
         <div class="sx"><input type="text" value="${esc(c.rs||'')}" data-cf="rs" data-i="${i}" placeholder="Raison sociale" aria-label="Raison sociale de ${esc(c.n)}"><input type="text" class="mono" value="${esc(c.ice||'')}" data-cf="ice" data-i="${i}" placeholder="ICE" aria-label="ICE de ${esc(c.n)}"><input type="text" value="${esc(c.addr||'')}" data-cf="addr" data-i="${i}" placeholder="Adresse" aria-label="Adresse de ${esc(c.n)}"></div></div>`; }).join('') || '<p class="muted shelp">Aucun client pour l’instant.</p>'}</div>
     <div class="sadd"><input type="text" id="s-new" placeholder="Nouveau client" aria-label="Nom du nouveau client"><button class="btn" type="button" data-sact="addcl">Ajouter</button></div>`;
   }
+  const label = (STABS.find(s => s[0] === tab) || STABS[0])[1];
+  const navBtn = k => { const [, l] = STABS.find(s => s[0] === k);
+    return `<button type="button" data-st="${k}"${tab === k ? ' aria-current="page"' : ''}>${SICONS[k] || ''}<span>${esc(l)}</span><span class="cnt">${settingsCount(k)}</span></button>`; };
+  panel.classList.add('wide');
   panel.innerHTML = `
-    <div class="ph"><span class="kind">Paramètres des listes</span>
+    <div class="ph"><span class="kind">Paramètres</span>
       <button class="iconbtn" type="button" data-act="close" aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></div>
-    <div class="stabs" role="tablist" aria-label="Listes">${STABS.map(([k,l]) => `<button class="tab" role="tab" type="button" data-st="${k}" aria-selected="${tab===k}">${esc(l)}</button>`).join('')}</div>
-    <div class="pbody">${body}</div>`;
+    <div class="sgrid">
+      <nav class="snav" aria-label="Sections des paramètres">
+        <div class="sg">Accès</div>${navBtn('users')}
+        <div class="sg">Projets</div>${navBtn('pstat')}${navBtn('clients')}
+        <div class="sg">Équipe</div>${navBtn('owners')}${navBtn('pilots')}${navBtn('creas')}
+      </nav>
+      <div class="pbody"><h2 class="stitle">${esc(label)}</h2>${body}</div>
+    </div>`;
   if(ro) panel.querySelectorAll('.pbody input,.pbody select,.pbody button').forEach(el => el.disabled = true);
   panel.hidden = false; scrim.hidden = false;
+}
+const svgI = d => `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const SICONS = {
+  users: svgI('<circle cx="6" cy="5.5" r="2.5"/><path d="M1.5 13.5c.6-2.4 2.3-3.6 4.5-3.6s3.9 1.2 4.5 3.6"/><path d="M11 3.2a2.4 2.4 0 0 1 0 4.6M12.6 10.2c1 .6 1.6 1.7 1.9 3.3"/>'),
+  pstat: svgI('<rect x="2" y="2.5" width="3.2" height="11" rx="1"/><rect x="6.4" y="2.5" width="3.2" height="7.5" rx="1"/><rect x="10.8" y="2.5" width="3.2" height="4.5" rx="1"/>'),
+  clients: svgI('<path d="M2.5 13.5V4.2L8 2.5v11M8 6h5.5v7.5"/><path d="M4.6 6.2h1.3M4.6 8.6h1.3M4.6 11h1.3M10 8.6h1.5M10 11h1.5"/><path d="M1.5 13.5h13"/>'),
+  owners: svgI('<circle cx="8" cy="5" r="2.6"/><path d="M3 13.5c.7-2.7 2.6-4 5-4s4.3 1.3 5 4"/>'),
+  pilots: svgI('<path d="M3 14V2.5M3 2.8h8.5l-1.8 2.6 1.8 2.6H3"/>'),
+  creas: svgI('<path d="M10.6 2.4l3 3-7.9 7.9H2.7v-3z"/><path d="M9.2 3.8l3 3"/>')
+};
+function settingsCount(k){
+  if(k === 'users') return S.users.size || '';
+  if(k === 'pstat') return PSTAT.length;
+  if(k === 'clients') return clientList().length;
+  if(ROLES[k]) return [...S.people.values()].filter(p => inRole(p, k)).length;
+  return '';
 }
 async function saveAccess(pid){
   if(!isAdmin() || !S.db || (S.me && pid === S.me.pid)) return;
