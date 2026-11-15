@@ -268,6 +268,10 @@ body{margin:0}
 .maintabs .mc:empty{display:none}
 section.db{margin-top:14px}
 section.db .db-head h2{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pwdwrap{display:flex;gap:6px;align-items:stretch;max-width:420px}
+.pwdwrap input{flex:1;min-width:0}
+.pwdeye{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:0 10px;cursor:pointer;font-size:12.5px;color:var(--muted)}
+.pwdeye[aria-pressed="true"]{color:var(--accent);border-color:var(--accent)}
 .flab{font-size:13px;color:var(--muted);font-weight:500;margin-top:4px}
 .finput{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;max-width:360px;width:100%}
 .authcard input[type=password]{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px}
@@ -812,7 +816,7 @@ function renderMyPassword(){
       <h2 class="stitle">Changer mon mot de passe</h2>
       <p class="muted shelp">Connecté en tant que ${esc(S.myEmail || '')}. Choisis un mot de passe d’au moins 8 caractères.</p>
       <label for="my-pwd1" class="flab">Nouveau mot de passe</label>
-      <input type="password" id="my-pwd1" class="finput" autocomplete="new-password" minlength="8" required>
+      <div class="pwdwrap"><input type="password" id="my-pwd1" class="finput" autocomplete="new-password" minlength="8" required><button type="button" class="pwdeye" data-eye="my-pwd1,my-pwd2" aria-label="Afficher les mots de passe" aria-pressed="false">Afficher</button></div>
       <label for="my-pwd2" class="flab">Confirme le mot de passe</label>
       <input type="password" id="my-pwd2" class="finput" autocomplete="new-password" minlength="8" required>
       <div><button class="btn primary" type="submit" id="my-pwd-save">Enregistrer</button></div>
@@ -828,7 +832,7 @@ function renderMyPassword(){
     $('#my-pwd-save').disabled = true;
     const r = await S.sb.auth.updateUser({password: a});
     S.pwdOk = !r.error;
-    S.pwdMsg = r.error ? (/different from the old/i.test(r.error.message || '') ? 'Choisis un mot de passe différent de l’actuel.' : 'Impossible d’enregistrer : ' + r.error.message) : 'Mot de passe modifié. Utilise-le à ta prochaine connexion.';
+    S.pwdMsg = r.error ? (/different from the old/i.test(r.error.message || '') ? 'C’est déjà ton mot de passe actuel : il est bien enregistré.' : 'Impossible d’enregistrer : ' + r.error.message) : `Mot de passe modifié pour ${S.myEmail}. À la prochaine connexion, utilise cette adresse avec le nouveau mot de passe (et mets à jour celui enregistré dans ton navigateur).`;
     renderMyPassword();
   });
 }
@@ -1246,6 +1250,12 @@ document.addEventListener('change', e => {
   LS.set('pt.' + sk.toLowerCase(), JSON.stringify(S[sk])); renderMain();
   const s2 = document.querySelector(`[data-sortsel="${kd}"]`); if(s2) s2.focus();
 });
+document.addEventListener('click', e => {
+  const eye = e.target.closest && e.target.closest('[data-eye]'); if(!eye) return;
+  const show = eye.getAttribute('aria-pressed') !== 'true';
+  eye.dataset.eye.split(',').forEach(id => { const i = document.getElementById(id); if(i) i.type = show ? 'text' : 'password'; });
+  eye.setAttribute('aria-pressed', show); eye.textContent = show ? 'Masquer' : 'Afficher';
+});
 document.addEventListener('keydown', e => {
   if(e.key === 'Escape' && S.open){ closePanel(); return; }
   if((e.key === 'Enter' || e.key === ' ') && e.target.matches('tr.row,.card')){ e.preventDefault(); e.target.click(); }
@@ -1464,7 +1474,7 @@ function loginForm(sb, msg){
     <label for="loginEmail" class="flab">Adresse email</label>
     <input type="email" id="loginEmail" required autocomplete="username" placeholder="prenom@entreprise.com">
     <label for="loginPwd" class="flab">Mot de passe</label>
-    <input type="password" id="loginPwd" required autocomplete="current-password">
+    <div class="pwdwrap"><input type="password" id="loginPwd" required autocomplete="current-password"><button type="button" class="pwdeye" data-eye="loginPwd" aria-label="Afficher le mot de passe" aria-pressed="false">Afficher</button></div>
     <button class="btn primary" type="submit" id="loginBtn">Se connecter</button>
     <p class="muted" id="loginMsg" role="status">${esc(msg||'')}</p>
     <p class="muted small">Mot de passe oublié ? Demande à un administrateur de t’en définir un nouveau.
