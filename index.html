@@ -401,8 +401,8 @@ const PRIO = [{n:'Basse',c:'green'},{n:'Moyenne',c:'yellow'},{n:'Haute',c:'red'}
 const BILL = [{n:'Non facturé',c:'gray'},{n:'Devis envoyé',c:'blue'},{n:'Acompte facturé',c:'yellow'},{n:'Facturé',c:'orange'},{n:'Payé',c:'green'}];
 const TAGS = [{n:'Mobilier',c:'brown'},{n:'Production',c:'red'},{n:'Scénographie',c:'purple'},{n:'Signalétique',c:'blue'},{n:'Logistique',c:'orange'},{n:'Prestataires',c:'green'}];
 const PALETTE = ['purple','blue','red','green','orange','pink','yellow','brown'];
-const PVIEWS = [['actifs','Actifs'],['chrono','Chronologie'],['calendrier','Calendrier'],['kanban','Kanban'],['tous','Tous les projets'],['statut','Répartition par statut'],['client','Par client']];
-const TVIEWS = [['parprojet','Par projet'],['kanban','Kanban'],['calendrier','Calendrier'],['toutes','Toutes les tâches'],['rendement','Tâches à faire par semaine'],['retard','Retard moyen par équipe'],['charge','Charge par personne']];
+const PVIEWS = [['tous','Tous les projets'],['actifs','Actifs'],['chrono','Chronologie'],['calendrier','Calendrier'],['kanban','Kanban'],['statut','Répartition par statut'],['client','Par client']];
+const TVIEWS = [['toutes','Toutes les tâches'],['parprojet','Par projet'],['kanban','Kanban'],['calendrier','Calendrier'],['rendement','Tâches à faire par semaine'],['retard','Retard moyen par équipe'],['charge','Charge par personne']];
 const find = (list, n) => list.find(s => s.n === n);
 
 const LS = {
@@ -413,10 +413,10 @@ const S = {
   db:null, projects:new Map(), tasks:new Map(), people:new Map(), users:new Map(), clients:[], meta:{}, sTab:'users',
   me:null, mine:false, sb:null, userMsg:'',
   loaded:{p:false,t:false,u:false}, err:null, readOnly:false, noDb:false,
-  pView: LS.get('pt.pv','actifs'), tView: LS.get('pt.tv','parprojet'),
+  pView: LS.get('pt.pv','tous'), tView: LS.get('pt.tv','toutes'),
   open:null, panelDirty:false, confirmDel:false, newPerson:false, newClient:false
 };
-if(!PVIEWS.some(v=>v[0]===S.pView)) S.pView='actifs';
+if(!PVIEWS.some(v=>v[0]===S.pView)) S.pView='tous';
 S.dSort = ['desc','asc','name'].includes(LS.get('pt.dsort','')) ? LS.get('pt.dsort','') : '';
 S.cSort = ['asc','name'].includes(LS.get('pt.csort','')) ? LS.get('pt.csort','') : '';
 S.rSort = ['desc','asc','name'].includes(LS.get('pt.rsort','')) ? LS.get('pt.rsort','') : '';
@@ -427,7 +427,7 @@ S.calFp = LS.get('pt.calfp', ''); S.calFt = LS.get('pt.calft', '');
 S.tlScale = LS.get('pt.tlscale', 'sem') === 'jour' ? 'jour' : 'sem';
 S.wSort =['desc','many','few'].includes(LS.get('pt.wsort','')) ? LS.get('pt.wsort','') : '';
 ['pSort','tSort'].forEach(sk => { try { const s = JSON.parse(LS.get('pt.' + sk.toLowerCase(), 'null')); if(s && typeof s.k === 'string' && (s.dir === 1 || s.dir === -1)) S[sk] = s; } catch(e){} });
-if(!TVIEWS.some(v=>v[0]===S.tView)) S.tView='parprojet';
+if(!TVIEWS.some(v=>v[0]===S.tView)) S.tView='toutes';
 
 /* ---------- dates ---------- */
 const DAY = 86400000;
