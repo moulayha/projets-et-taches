@@ -1090,6 +1090,19 @@ function personUse(id, f){
   const nt = f === 'owners' ? allT().filter(t => (t.owners||[]).includes(id)).length : 0;
   return {np, nt, text: [np ? plural(np,'projet') : '', nt ? plural(nt,'tâche') : ''].filter(Boolean).join(' · ') || 'non utilisé'};
 }
+function personUseAll(id){
+  const np = allP().filter(p => Object.keys(ROLES).some(f => (p[f]||[]).includes(id))).length;
+  const nt = allT().filter(t => (t.owners||[]).includes(id)).length;
+  return {n: np + nt, text: [np ? plural(np,'projet') : '', nt ? plural(nt,'tâche') : ''].filter(Boolean).join(' et ')};
+}
+function removePerson(id){
+  if(!S.db || S.readOnly || S.users.get(id)) return;
+  allP().forEach(p => { const d = {}; Object.keys(ROLES).forEach(f => { if((p[f]||[]).includes(id)) d[f] = p[f].filter(x => x !== id); }); if(Object.keys(d).length) patch('p', p.id, d); });
+  allT().forEach(t => { if((t.owners||[]).includes(id)) patch('t', t.id, {owners: t.owners.filter(x => x !== id)}); });
+  if(S.fOwner === id){ S.fOwner = ''; LS.set('pt.fowner', ''); }
+  if(S.fPOwner === id){ S.fPOwner = ''; LS.set('pt.fpowner', ''); }
+  deletePerson(id);
+}
 function openSettings(){ S.open = {kind:'s'}; renderPanel(); }
 function renderSettings(){
   const ro = !S.db || S.readOnly, tab = S.sTab;
@@ -1122,8 +1135,10 @@ function renderSettings(){
         <select data-urole="${id}" aria-label="Rôle de ${esc(p.name||'')}"${self || busy ? ' disabled' : ''}${self ? ' title="Tu ne peux pas modifier ton propre rôle"' : ''}>${roleOpts(u.role)}</select>
         <div class="sx"><input type="email" value="${esc(u.email)}" data-uemail="${id}" aria-label="Email de ${esc(p.name||'')}"${self || busy ? ' disabled' : ''}>
           ${ed.pid === p.id ? '' : `<button class="btn" type="button" data-sact="upwd" data-id="${id}"${dis}>${self ? 'Mon mot de passe' : 'Nouveau mot de passe'}</button>${self ? '' : `<button class="btn danger" type="button" data-sact="udel" data-id="${id}"${dis}>Supprimer le compte</button>`}`}</div>${extra}</div>`;
+      if(ed.pid === p.id && ed.mode === 'pdel'){ const u = personUseAll(p.id);
+        extra = `<div class="uform confirm"><span>Supprimer ${esc(p.name||'cette personne')} de l’application ?${u.n ? ` Son nom sera retiré de ${esc(u.text)}.` : ''}</span><button class="btn" type="button" data-sact="ucancel">Annuler</button><button class="btn danger" type="button" data-sact="pdelok" data-id="${id}"${dis}>Supprimer</button></div>`; }
       return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${id}" aria-label="Nom">
-        ${ed.pid === p.id ? '' : `<span class="sact"><button class="btn" type="button" data-sact="ucreate" data-id="${id}"${dis}>Créer un compte</button></span>`}${extra}</div>`; };
+        ${ed.pid === p.id ? '' : `<span class="sact"><button class="btn" type="button" data-sact="ucreate" data-id="${id}"${dis}>Créer un compte</button><button class="btn danger" type="button" data-sact="pdel" data-id="${id}"${dis}>Supprimer</button></span>`}${extra}</div>`; };
     body = `<p class="muted shelp">Chaque compte se connecte avec son <strong>email et son mot de passe</strong>. Tout le monde voit tous les projets et toutes les tâches. <strong>Lecture seule</strong> : consulte sans rien modifier. <strong>Membre</strong> : peut créer, modifier et supprimer projets et tâches. <strong>Administrateur</strong> : comme un membre, avec en plus l’accès aux paramètres et aux comptes.</p>
     <p class="muted shelp">Pour créer un compte : « Créer un compte », saisis l’email, un mot de passe provisoire (ou « Générer »), choisis le rôle, puis transmets l’email et le mot de passe à la personne. Elle pourra ensuite le changer avec « Mon mot de passe ».</p>
     ${S.userMsg ? `<p class="shelp" role="status" style="color:${S.userOk ? 'var(--accent)' : 'var(--danger)'}">${esc(S.userMsg)}</p>` : ''}
@@ -1259,11 +1274,14 @@ function settingsClick(e){
         const pwd = e.pwd;
         runUserAction({action:'set_password', person_id:e.pid, password:pwd}, `Nouveau mot de passe pour ${nm} : ${pwd}`);
       } else if(e.mode === 'del'){
-        runUserAction({action:'delete', person_id:e.pid}, `Le compte de ${nm} est supprimé.`);
+        runUserAction({action:'delete', person_id:e.pid}, `Le compte de ${nm} est supprimé. Son nom reste dans « Sans accès » : clique sur « Supprimer » pour le retirer complètement.`);
       }
       return;
     }
   }
+  else if(a === 'pdel'){ S.userMsg = ''; S.uEdit = {pid: b.dataset.id, mode:'pdel'}; }
+  else if(a === 'pdelok'){ const p = S.people.get(b.dataset.id); S.uEdit = null;
+    if(p && !S.users.get(p.id)){ removePerson(p.id); S.userOk = true; S.userMsg = `Personne supprimée : ${p.name || 'sans nom'}.`; } }
   else if(a === 'adduser'){
     if(!name) return;
     if(![...S.people.values()].some(p => same(p.name||'', name))) addPerson(name, null);
