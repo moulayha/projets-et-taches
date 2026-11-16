@@ -161,6 +161,13 @@ table.grid{border-collapse:collapse;width:100%;font-size:13.5px}
 .tl-months span,.tl-weeks span{position:absolute;top:4px;font-size:11.5px;color:var(--muted);white-space:nowrap;padding-left:6px}
 .tl-months span{font-weight:600;color:var(--fg);text-transform:capitalize}
 .tl-weeks span{font-family:var(--mono);border-left:1px solid var(--line);top:0;height:24px;line-height:24px}
+.tl-days{position:relative;height:36px;border-bottom:1px solid var(--line)}
+.tl-days span{position:absolute;top:0;height:36px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border-left:1px solid var(--line);font:10.5px var(--mono);color:var(--muted);text-transform:capitalize}
+.tl-days span b{font:600 12.5px var(--mono);color:var(--fg)}
+.tl-days span.we{background:color-mix(in srgb, var(--line) 45%, transparent)}
+.tl-days span.td b,.tl-days span.td{color:var(--danger)}
+.tl-we{position:absolute;top:0;bottom:0;background:color-mix(in srgb, var(--line) 45%, transparent);pointer-events:none}
+.tl-scale-l{margin-left:14px}
 .tl-rows{position:relative}
 .tl-row{position:relative;height:42px;border-bottom:1px solid var(--line)}
 .tl-row:last-child{border-bottom:0}
@@ -393,6 +400,7 @@ S.rSort = ['desc','asc','name'].includes(LS.get('pt.rsort','')) ? LS.get('pt.rso
 S.fOwner = LS.get('pt.fowner', '');
 S.fClient = LS.get('pt.fclient', '');
 S.fPOwner = LS.get('pt.fpowner', '');
+S.tlScale = LS.get('pt.tlscale', 'sem') === 'jour' ? 'jour' : 'sem';
 S.wSort =['desc','many','few'].includes(LS.get('pt.wsort','')) ? LS.get('pt.wsort','') : '';
 ['pSort','tSort'].forEach(sk => { try { const s = JSON.parse(LS.get('pt.' + sk.toLowerCase(), 'null')); if(s && typeof s.k === 'string' && (s.dir === 1 || s.dir === -1)) S[sk] = s; } catch(e){} });
 if(!TVIEWS.some(v=>v[0]===S.tView)) S.tView='parprojet';
@@ -406,6 +414,7 @@ function diffDays(a, b){ return Math.round((b - a) / DAY); }
 const fmtL = new Intl.DateTimeFormat('fr-FR',{day:'numeric',month:'short',year:'numeric'});
 const fmtS = new Intl.DateTimeFormat('fr-FR',{day:'numeric',month:'short'});
 const fmtM = new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'});
+const fmtWd = new Intl.DateTimeFormat('fr-FR',{weekday:'short'});
 function fd(s){ const d = parseD(s); return d ? fmtL.format(d) : ''; }
 
 /* ---------- helpers ---------- */
@@ -624,7 +633,7 @@ function viewProjectsOf(ps){
       if(none.length) cols.push({v:'', label:'<span class="muted">Sans client</span>', items: none});
       return sortBar('p') + board(cols, 'p', 'client', pCard);
     }
-    case 'chrono': return sortBar('p') + timeline(sortRows(ps, S.pSort));
+    case 'chrono': return sortBar('p').replace(/<\/div>$/, `<label for="tlscale" class="tl-scale-l">Échelle</label><select id="tlscale"><option value="sem"${S.tlScale === 'sem' ? ' selected' : ''}>Par semaine</option><option value="jour"${S.tlScale === 'jour' ? ' selected' : ''}>Par jour</option></select></div>`) + timeline(sortRows(ps, S.pSort));
     case 'statut': return donut(ps);
   }
   return '';
@@ -638,12 +647,18 @@ function timeline(ps){
   let max = Math.max(+t, ...dated.map(p => +(parseD(p.end) || parseD(p.start))));
   const start = new Date(min - 7*DAY); start.setDate(start.getDate() - ((start.getDay()+6)%7));
   let end = new Date(max + 21*DAY); if(diffDays(start, end) < 70) end = new Date(+start + 70*DAY);
-  const W = 22, days = diffDays(start, end), width = days*W;
-  let months = '', weeks = '';
+  const byDay = S.tlScale === 'jour';
+  const W = byDay ? 44 : 22, days = diffDays(start, end), width = days*W;
+  let months = '', weeks = '', dayCells = '', weekends = '';
   for(let i=0;i<days;i++){
     const d = new Date(+start + i*DAY); d.setHours(0,0,0,0);
     if(d.getDate() === 1 || i === 0) months += `<span style="left:${i*W}px">${esc(fmtM.format(d))}</span>`;
-    if(d.getDay() === 1) weeks += `<span style="left:${i*W}px;width:${7*W}px">${esc(fmtS.format(d))}</span>`;
+    if(d.getDay() === 1) weeks += `<span style="left:${i*W}px;width:${7*W}px">${esc((byDay ? 'Semaine du ' : '') + fmtS.format(d))}</span>`;
+    if(byDay){
+      const we = d.getDay() === 0 || d.getDay() === 6, td = +d === +t;
+      dayCells += `<span class="${we ? 'we' : ''}${td ? ' td' : ''}" style="left:${i*W}px;width:${W}px">${esc(fmtWd.format(d).replace('.', ''))}<b>${d.getDate()}</b></span>`;
+      if(we) weekends += `<div class="tl-we" style="left:${i*W}px;width:${W}px"></div>`;
+    }
   }
   const rows = dated.map(p => {
     const s = parseD(p.start), e = parseD(p.end) || s;
@@ -653,8 +668,8 @@ function timeline(ps){
   }).join('');
   const tl = diffDays(start, t)*W + W/2;
   return `<div class="tl"><div class="tl-inner" style="width:${width}px">
-    <div class="tl-months">${months}</div><div class="tl-weeks">${weeks}</div>
-    <div class="tl-rows"><div class="tl-grid" style="--wk:${7*W}px;background-position:${(((8 - (start.getDay()||7)) % 7))*W}px 0"></div>${rows}
+    <div class="tl-months">${months}</div><div class="tl-weeks">${weeks}</div>${byDay ? `<div class="tl-days">${dayCells}</div>` : ''}
+    <div class="tl-rows">${weekends}<div class="tl-grid" style="--wk:${(byDay ? 1 : 7)*W}px;background-position:${byDay ? 0 : (((8 - (start.getDay()||7)) % 7))*W}px 0"></div>${rows}
       <div class="tl-today" style="left:${tl}px"><b>Aujourd’hui</b></div></div>
   </div></div>${und}`;
 }
@@ -793,7 +808,15 @@ function renderMain(){
   $('#mcP').textContent = np ? np : ''; $('#mcT').textContent = nt ? nt : '';
   renderMine();
   const ready = S.loaded.p || S.projects.size;
+  const oldTl = $('#pview .tl'), tlLeft = oldTl ? oldTl.scrollLeft : null;
   $('#pview').innerHTML = (S.noDb || ready) ? viewProjects() : emptyBox('Chargement des projets…', 'Les projets s’afficheront ici dans un instant.');
+  const newTl = $('#pview .tl');
+  if(newTl){
+    const td = newTl.querySelector('.tl-today');
+    if((S.tlJump || tlLeft == null) && S.tlScale === 'jour' && td) newTl.scrollLeft = Math.max(0, parseFloat(td.style.left) - 7*44);
+    else if(tlLeft != null && !S.tlJump) newTl.scrollLeft = tlLeft;
+    S.tlJump = false;
+  }
   $('#tview').innerHTML = (S.noDb || S.loaded.t || S.tasks.size) ? viewTasks() : emptyBox('Chargement des tâches…', 'Les tâches s’afficheront ici dans un instant.');
   const dis = !S.db || S.readOnly;
   $('#addP').disabled = dis; $('#addT').disabled = dis;
@@ -1242,6 +1265,7 @@ document.addEventListener('change', e => {
   if(e.target.id === 'fPOwner'){ S.fPOwner = e.target.value; LS.set('pt.fpowner', S.fPOwner); renderMain(); const d = $('#fPOwner'); if(d) d.focus(); return; }
   if(e.target.id === 'fClient'){ S.fClient = e.target.value; LS.set('pt.fclient', S.fClient); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
   if(e.target.id === 'fOwner'){ S.fOwner = e.target.value; LS.set('pt.fowner', S.fOwner); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
+  if(e.target.id === 'tlscale'){ S.tlScale = e.target.value === 'jour' ? 'jour' : 'sem'; LS.set('pt.tlscale', S.tlScale); S.tlJump = true; renderMain(); const d = $('#tlscale'); if(d) d.focus(); return; }
   if(['dsort','csort','rsort','wsort'].includes(e.target.id)){ const id = e.target.id, k = id[0] + 'Sort';
     S[k] = e.target.value; LS.set('pt.' + id, S[k]); renderMain(); const d = document.getElementById(id); if(d) d.focus(); return; }
   const sel = e.target.closest && e.target.closest('[data-sortsel]'); if(!sel) return;
