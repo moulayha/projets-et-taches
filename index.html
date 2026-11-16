@@ -388,7 +388,7 @@ let PSTAT = DEFAULT_PSTAT;
 const COLORS = [['gray','Gris'],['brown','Brun'],['orange','Orange'],['yellow','Jaune'],['green','Vert'],['blue','Bleu'],['purple','Violet'],['pink','Rose'],['red','Rouge']];
 const GROUPS = [['todo','Pas commencé'],['prog','Actif'],['done','Clos']];
 const ROLES = {owners:'Responsable', pilots:'Pilote de projet', creas:'Responsable créa'};
-const STABS = [['users','Utilisateurs'],['pstat','État d’avancement'],['owners','Responsable'],['pilots','Pilote de projet'],['creas','Responsable créa'],['clients','Client']];
+const STABS = [['users','Utilisateurs'],['pstat','État d’avancement'],['owners','Responsable'],['pilots','Pilote de projet'],['creas','Responsable créa'],['clients','Client'],['tags','Étiquettes']];
 const okColor = c => COLORS.some(x => x[0] === c) ? c : 'gray';
 function cleanPstat(x){
   if(!Array.isArray(x)) return null;
@@ -399,7 +399,13 @@ const inRole = (p, f) => !Array.isArray(p.roles) || p.roles.includes(f);
 const TSTAT = [{n:'À faire',c:'gray',g:'todo'},{n:'En cours',c:'blue',g:'prog'},{n:'Terminé',c:'green',g:'done'},{n:'Archivé',c:'gray',g:'done'}];
 const PRIO = [{n:'Basse',c:'green'},{n:'Moyenne',c:'yellow'},{n:'Haute',c:'red'}];
 const BILL = [{n:'Non facturé',c:'gray'},{n:'Devis envoyé',c:'blue'},{n:'Acompte facturé',c:'yellow'},{n:'Facturé',c:'orange'},{n:'Payé',c:'green'}];
-const TAGS = [{n:'Mobilier',c:'brown'},{n:'Production',c:'red'},{n:'Scénographie',c:'purple'},{n:'Signalétique',c:'blue'},{n:'Logistique',c:'orange'},{n:'Prestataires',c:'green'}];
+const DEFAULT_TAGS = [{n:'Mobilier',c:'brown'},{n:'Production',c:'red'},{n:'Scénographie',c:'purple'},{n:'Signalétique',c:'blue'},{n:'Logistique',c:'orange'},{n:'Prestataires',c:'green'}];
+let TAGS = DEFAULT_TAGS;
+function cleanTags(x){
+  if(!Array.isArray(x)) return null;
+  const seen = new Set();
+  return x.filter(t => t && typeof t.n === 'string' && t.n.trim() && !seen.has(t.n.toLowerCase()) && seen.add(t.n.toLowerCase())).map(t => ({n:t.n, c:okColor(t.c)}));
+}
 const PALETTE = ['purple','blue','red','green','orange','pink','yellow','brown'];
 const PVIEWS = [['tous','Tous les projets'],['actifs','Actifs'],['chrono','Chronologie'],['calendrier','Calendrier'],['kanban','Kanban'],['statut','Répartition par statut'],['client','Par client']];
 const TVIEWS = [['toutes','Toutes les tâches'],['parprojet','Par projet'],['kanban','Kanban'],['calendrier','Calendrier'],['rendement','Tâches à faire par semaine'],['retard','Retard moyen par équipe'],['charge','Charge par personne']];
@@ -1091,6 +1097,8 @@ function saveMeta(part){
 }
 function saveClients(list){ S.clients = list; return saveMeta({clients:list}); }
 function savePstat(list){ PSTAT = list; saveMeta({pstat:list}); renderMain(); }
+function saveTags(list){ TAGS = list; saveMeta({tags:list}); renderMain(); }
+const tagUse = n => allT().filter(t => (t.tags||[]).includes(n));
 
 /* ---------- settings ---------- */
 const byName = (a,b) => String(a.name||'').localeCompare(String(b.name||''), 'fr');
@@ -1158,6 +1166,16 @@ function renderSettings(){
     <h3 class="sh">Sans accès <span class="suse">${without.length}</span></h3>
     <div class="slist">${without.map(row).join('')}</div>
     <div class="sadd"><input type="text" id="s-new" placeholder="Nouvelle personne" aria-label="Nom de la nouvelle personne"><button class="btn" type="button" data-sact="adduser">Ajouter</button></div>`;
+  } else if(tab === 'tags'){
+    body = `<p class="muted shelp">Les étiquettes se cochent dans la fiche d’une tâche. L’ordre ici est celui de la fiche. Renommer une étiquette met à jour toutes les tâches concernées.</p>
+    <div class="slist">${TAGS.map((tg,i) => { const n = tagUse(tg.n).length;
+      const conf = S.tgDel === tg.n ? `<div class="uform confirm"><span>Supprimer l’étiquette « ${esc(tg.n)} » ?${n ? ` Elle sera retirée de ${plural(n,'tâche')}.` : ''}</span><button class="btn" type="button" data-sact="tgcancel">Annuler</button><button class="btn danger" type="button" data-sact="tgdelok" data-i="${i}">Supprimer</button></div>` : '';
+      return `<div class="srow"><span class="sw" style="background:var(--s-${tg.c})"></span>
+        <input type="text" value="${esc(tg.n)}" data-tg="n" data-i="${i}" aria-label="Nom de l’étiquette">
+        ${colorSel(`data-tg="c" data-i="${i}"`, tg.c)}
+        <span class="suse">${plural(n,'tâche')}</span>
+        <span class="sact"><button class="iconbtn" type="button" data-sact="tgup" data-i="${i}"${i===0?' disabled':''} aria-label="Monter">↑</button><button class="iconbtn" type="button" data-sact="tgdown" data-i="${i}"${i===TAGS.length-1?' disabled':''} aria-label="Descendre">↓</button><button class="iconbtn" type="button" data-sact="tgdel" data-i="${i}" title="Supprimer" aria-label="Supprimer ${esc(tg.n)}">×</button></span>${conf}</div>`; }).join('') || '<p class="muted shelp">Aucune étiquette pour l’instant.</p>'}</div>
+    <div class="sadd"><input type="text" id="s-new" placeholder="Nouvelle étiquette" aria-label="Nom de la nouvelle étiquette"><button class="btn" type="button" data-sact="addtg">Ajouter</button></div>`;
   } else if(ROLES[tab]){
     const f = tab, all = [...S.people.values()].sort(byName);
     const list = all.filter(p => inRole(p, f)), others = all.filter(p => !inRole(p, f));
@@ -1190,6 +1208,7 @@ function renderSettings(){
       <nav class="snav" aria-label="Sections des paramètres">
         <div class="sg">Accès</div>${navBtn('users')}
         <div class="sg">Projets</div>${navBtn('pstat')}${navBtn('clients')}
+        <div class="sg">Tâches</div>${navBtn('tags')}
         <div class="sg">Équipe</div>${navBtn('owners')}${navBtn('pilots')}${navBtn('creas')}
       </nav>
       <div class="pbody"><h2 class="stitle">${esc(label)}</h2>${body}</div>
@@ -1204,12 +1223,14 @@ const SICONS = {
   clients: svgI('<path d="M2.5 13.5V4.2L8 2.5v11M8 6h5.5v7.5"/><path d="M4.6 6.2h1.3M4.6 8.6h1.3M4.6 11h1.3M10 8.6h1.5M10 11h1.5"/><path d="M1.5 13.5h13"/>'),
   owners: svgI('<circle cx="8" cy="5" r="2.6"/><path d="M3 13.5c.7-2.7 2.6-4 5-4s4.3 1.3 5 4"/>'),
   pilots: svgI('<path d="M3 14V2.5M3 2.8h8.5l-1.8 2.6 1.8 2.6H3"/>'),
-  creas: svgI('<path d="M10.6 2.4l3 3-7.9 7.9H2.7v-3z"/><path d="M9.2 3.8l3 3"/>')
+  creas: svgI('<path d="M10.6 2.4l3 3-7.9 7.9H2.7v-3z"/><path d="M9.2 3.8l3 3"/>'),
+  tags: svgI('<path d="M2 2.5h5.3l6.5 6.5-4.8 4.8L2.5 7.3z"/><circle cx="5" cy="5.3" r="1"/>')
 };
 function settingsCount(k){
   if(k === 'users') return S.users.size || '';
   if(k === 'pstat') return PSTAT.length;
   if(k === 'clients') return clientList().length;
+  if(k === 'tags') return TAGS.length;
   if(ROLES[k]) return [...S.people.values()].filter(p => inRole(p, k)).length;
   return '';
 }
@@ -1297,6 +1318,13 @@ function settingsClick(e){
     if(!name) return;
     if(![...S.people.values()].some(p => same(p.name||'', name))) addPerson(name, null);
   }
+  else if(a === 'tgup' || a === 'tgdown'){ const l = TAGS.slice(), j = a === 'tgup' ? i-1 : i+1; if(j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; saveTags(l); }
+  else if(a === 'tgdel'){ const tg = TAGS[i]; S.tgDel = tg ? tg.n : null; }
+  else if(a === 'tgcancel'){ S.tgDel = null; }
+  else if(a === 'tgdelok'){ const tg = TAGS[i]; S.tgDel = null; if(!tg) return renderPanel();
+    tagUse(tg.n).forEach(t => patch('t', t.id, {tags: t.tags.filter(x => x !== tg.n)}));
+    saveTags(TAGS.filter((_,k) => k !== i)); }
+  else if(a === 'addtg'){ if(!name || TAGS.some(t => same(t.n, name))) return; saveTags([...TAGS, {n:name, c:PALETTE[TAGS.length % PALETTE.length]}]); }
   else if(a === 'delcl'){ const cl = clientList(), c = cl[i]; if(!c || allP().some(p => p.client === c.n)) return; saveClients(cl.filter((_,k) => k !== i)); }
   else if(a === 'addcl'){ const cl = clientList(); if(!name || cl.some(c => same(c.n, name))) return; saveClients([...cl, {n:name, c:PALETTE[cl.length % PALETTE.length]}]); }
   renderPanel();
@@ -1322,6 +1350,15 @@ function settingsChange(e){
       allP().filter(p => p.status === old).forEach(p => patch('p', p.id, {status:v}));
     } else if(el.dataset.ps === 'c'){ s.c = okColor(el.value); savePstat(l); }
     else { s.g = el.value; savePstat(l); }
+    renderPanel(); return;
+  }
+  if(el.dataset.tg){
+    const i = +el.dataset.i, l = TAGS.map(t => ({...t})), tg = l[i]; if(!tg) return;
+    if(el.dataset.tg === 'c'){ tg.c = okColor(el.value); saveTags(l); renderPanel(); return; }
+    const v = el.value.trim(), old = tg.n;
+    if(!v || v === old || l.some((x,k) => k !== i && x.n.toLowerCase() === v.toLowerCase())){ renderPanel(); return; }
+    tg.n = v; saveTags(l);
+    tagUse(old).forEach(t => patch('t', t.id, {tags: t.tags.map(x => x === old ? v : x)}));
     renderPanel(); return;
   }
   if(el.dataset.pn){ const v = el.value.trim(); const p = S.people.get(el.dataset.pn); if(p && v && v !== p.name) patchPerson(p.id, {name:v}); else renderPanel(); return; }
@@ -1697,6 +1734,7 @@ renderTabs(); renderMain();
     S.meta = d.exists ? {...(d.data()||{})} : {};
     S.clients = Array.isArray(S.meta.clients) ? S.meta.clients : [];
     PSTAT = cleanPstat(S.meta.pstat) || DEFAULT_PSTAT;
+    TAGS = cleanTags(S.meta.tags) || DEFAULT_TAGS;
     onData();
   }, () => {});
 })();
