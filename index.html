@@ -196,6 +196,8 @@ table.grid{border-collapse:collapse;width:100%;font-size:13.5px}
 .cal-bar.cut0{margin-left:0;border-top-left-radius:0;border-bottom-left-radius:0}
 .cal-bar.cut1{margin-right:0;border-top-right-radius:0;border-bottom-right-radius:0}
 .cal-bar:hover{filter:brightness(.95)}
+.cal-bar.done{opacity:.55;text-decoration:line-through}
+.cal-bar.late{box-shadow:inset 0 0 0 1.5px var(--danger)}
 @media (max-width:640px){.cal-wh span{padding:6px 2px;font-size:11px}.cal-bar{font-size:11px;padding:0 4px;margin:0 2px}.cal-wk{min-height:72px}}
 .undated{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;color:var(--muted);font-size:13px}
 .undated button{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:2px 8px;cursor:pointer}
@@ -400,7 +402,7 @@ const BILL = [{n:'Non facturé',c:'gray'},{n:'Devis envoyé',c:'blue'},{n:'Acomp
 const TAGS = [{n:'Mobilier',c:'brown'},{n:'Production',c:'red'},{n:'Scénographie',c:'purple'},{n:'Signalétique',c:'blue'},{n:'Logistique',c:'orange'},{n:'Prestataires',c:'green'}];
 const PALETTE = ['purple','blue','red','green','orange','pink','yellow','brown'];
 const PVIEWS = [['actifs','Actifs'],['chrono','Chronologie'],['calendrier','Calendrier'],['kanban','Kanban'],['tous','Tous les projets'],['statut','Répartition par statut'],['client','Par client']];
-const TVIEWS = [['parprojet','Par projet'],['kanban','Kanban'],['toutes','Toutes les tâches'],['rendement','Tâches à faire par semaine'],['retard','Retard moyen par équipe'],['charge','Charge par personne']];
+const TVIEWS = [['parprojet','Par projet'],['kanban','Kanban'],['calendrier','Calendrier'],['toutes','Toutes les tâches'],['rendement','Tâches à faire par semaine'],['retard','Retard moyen par équipe'],['charge','Charge par personne']];
 const find = (list, n) => list.find(s => s.n === n);
 
 const LS = {
@@ -695,14 +697,17 @@ function timeline(ps){
       <div class="tl-today" style="left:${tl}px"><b>Aujourd’hui</b></div></div>
   </div></div>${und}`;
 }
-function calendar(ps){
+function calendar(ps, kind){
+  kind = kind || 'p';
+  const isT = kind === 't', STL = isT ? TSTAT : PSTAT, noun = isT ? 'tâche' : 'projet';
+  const k0 = isT ? 'due' : 'start', k1 = isT ? 'due' : 'end';
   const t = today();
   if(!S.calM) S.calM = new Date(t.getFullYear(), t.getMonth(), 1);
   const m = S.calM, first = new Date(m.getFullYear(), m.getMonth(), 1), last = new Date(m.getFullYear(), m.getMonth()+1, 0);
   const gs = new Date(first); gs.setDate(gs.getDate() - ((gs.getDay()+6)%7));
   const ge = new Date(last); ge.setDate(ge.getDate() + (7 - ((ge.getDay()+6)%7) - 1));
-  const dated = ps.map(p => ({p, s: parseD(p.start), e: parseD(p.end) || parseD(p.start)})).filter(x => x.s).map(x => x.e < x.s ? {...x, e: x.s} : x);
-  const undated = ps.filter(p => !parseD(p.start));
+  const dated = ps.map(p => ({p, s: parseD(p[k0]), e: parseD(p[k1]) || parseD(p[k0])})).filter(x => x.s).map(x => x.e < x.s ? {...x, e: x.s} : x);
+  const undated = ps.filter(p => !parseD(p[k0]));
   const inMonth = dated.filter(x => x.e >= first && x.s <= last).length;
   let weeks = '';
   for(let ws = new Date(gs); ws <= ge; ws = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+7)){
@@ -720,15 +725,21 @@ function calendar(ps){
       cells += `<div class="${cls}" style="grid-column:${i+1}"><span>${d.getDate()}</span></div>`;
     }
     const bars = segs.map(g => {
-      const st = find(PSTAT, g.p.status) || PSTAT[0], nm = g.p.name || 'Sans titre';
-      const tip = nm + ' · ' + (g.p.end && g.p.end !== g.p.start ? fd(g.p.start) + ' → ' + fd(g.p.end) : fd(g.p.start));
-      return `<button type="button" class="cal-bar c-${st.c}${g.cut0 ? ' cut0' : ''}${g.cut1 ? ' cut1' : ''}" data-open="p:${esc(g.p.id)}" title="${esc(tip)}" style="grid-column:${g.c0+1} / ${g.c1+2};grid-row:${g.lane+2}">${g.cut0 ? '← ' : ''}${esc(nm)}</button>`;
+      const st = find(STL, g.p.status) || STL[0], nm = g.p.name || 'Sans titre';
+      let tip, extra = '';
+      if(isT){
+        const pr = g.p.project && S.projects.get(g.p.project), done = isDoneT(g.p), late = !done && g.s < t;
+        tip = nm + ' · ' + st.n + ' · à rendre le ' + fd(g.p.due) + (pr ? ' · ' + (pr.name || 'Sans titre') : '') + (late ? ' · en retard' : '');
+        extra = (done ? ' done' : '') + (late ? ' late' : '');
+      } else tip = nm + ' · ' + (g.p.end && g.p.end !== g.p.start ? fd(g.p.start) + ' → ' + fd(g.p.end) : fd(g.p.start));
+      return `<button type="button" class="cal-bar c-${st.c}${extra}${g.cut0 ? ' cut0' : ''}${g.cut1 ? ' cut1' : ''}" data-open="${kind}:${esc(g.p.id)}" title="${esc(tip)}" style="grid-column:${g.c0+1} / ${g.c1+2};grid-row:${g.lane+2}">${g.cut0 ? '← ' : ''}${esc(nm)}</button>`;
     }).join('');
     weeks += `<div class="cal-wk" style="grid-template-rows:30px repeat(${Math.max(lanes.length, 1)}, 24px) minmax(8px, 1fr)">${cells}${bars}</div>`;
   }
   const label = fmtM.format(m);
-  const und = undated.length ? `<div class="undated"><span>Sans date :</span>${undated.map(p => `<button type="button" data-open="p:${esc(p.id)}">${esc(p.name||'Sans titre')}</button>`).join('')}</div>` : '';
-  return `<div class="cal"><div class="cal-hd"><h3>${esc(label.charAt(0).toUpperCase() + label.slice(1))}</h3><span class="muted">${inMonth} projet${inMonth > 1 ? 's' : ''} ce mois-ci</span>
+  const undShown = isT ? undated.filter(x => !isDoneT(x)) : undated;
+  const und = undShown.length ? `<div class="undated"><span>${isT ? 'Sans date limite' : 'Sans date'} :</span>${undShown.map(p => `<button type="button" data-open="${kind}:${esc(p.id)}">${esc(p.name||'Sans titre')}</button>`).join('')}</div>` : '';
+  return `<div class="cal"><div class="cal-hd"><h3>${esc(label.charAt(0).toUpperCase() + label.slice(1))}</h3><span class="muted">${inMonth} ${noun}${inMonth > 1 ? 's' : ''} ce mois-ci</span>
       <div class="cal-nav"><button type="button" class="btn" data-cal="today">Aujourd’hui</button><button type="button" class="btn" data-cal="-1" aria-label="Mois précédent">‹</button><button type="button" class="btn" data-cal="1" aria-label="Mois suivant">›</button></div></div>
     <div class="cal-wh">${['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].map(d => `<span>${d}</span>`).join('')}</div>${weeks}</div>${und}`;
 }
@@ -782,6 +793,7 @@ function viewTasksOf(ts){
     }
     case 'toutes': return table([TC.name, TC.status, TC.owners, TC.due, TC.prio, TC.tags, TC.project, TC.blocked, TC.blocks], sortRows(ts, S.tSort, 't'), 't', S.tSort || {});
     case 'kanban': return sortBar('t') + board(TSTAT.map(s => ({v:s.n, label:pill(s.n, s.c, 'status'), items: sortRows(ts.filter(t => t.status === s.n), S.tSort, 't')})), 't', 'status', tCard);
+    case 'calendrier': return calendar(sortRows(ts, S.tSort, 't'), 't');
     case 'rendement': return chartRendement(ts);
     case 'retard': { const open = ts.filter(t => !isDoneT(t)); return open.length ? chartRetard(open) : emptyBox('Aucune tâche en cours', 'Les tâches terminées ou archivées ne comptent pas dans le retard.'); }
     case 'charge': { const open = ts.filter(t => !isDoneT(t)); return open.length ? chartCharge(open) : emptyBox('Aucune tâche en cours', 'Les tâches terminées ou archivées ne comptent pas dans la charge.'); }
