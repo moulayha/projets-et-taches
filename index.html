@@ -488,7 +488,8 @@ function prioPill(n){ const p = find(PRIO, n); return p ? pill(p.n, p.c) : ''; }
 function billPill(n){ const b = find(BILL, n); return b ? pill(b.n, b.c, 'status') : ''; }
 function clientPill(n){ return n ? pill(n, clientColor(n)) : ''; }
 function tagPills(tags){ return `<div class="pills">${(tags||[]).map(n => { const t = find(TAGS,n); return pill(n, t ? t.c : 'gray'); }).join('')}</div>`; }
-function avatar(id){ const n = personName(id); const c = hashColor(id); return `<span class="av c-${c}" aria-hidden="true">${esc(n.trim().charAt(0).toUpperCase() || '?')}</span>`; }
+function personColor(id){ const p = S.people.get(id); return p && p.color && COLORS.some(x => x[0] === p.color) ? p.color : hashColor(id); }
+function avatar(id){ const n = personName(id); const c = personColor(id); return `<span class="av c-${c}" aria-hidden="true">${esc(n.trim().charAt(0).toUpperCase() || '?')}</span>`; }
 function peopleCell(ids){ ids = ids || []; if(!ids.length) return ''; return `<div class="people">${ids.map(id => `<span class="person">${avatar(id)}${esc(personName(id))}</span>`).join('')}</div>`; }
 function refs(ids, map){ return (ids||[]).filter(id => map.has(id)).map(id => `<span class="ref">${esc(map.get(id).name || 'Sans titre')}</span>`).join(''); }
 function nameCell(n){ return n ? `<span class="title-cell">${esc(n)}</span>` : `<span class="title-cell untitled">Sans titre</span>`; }
@@ -1103,6 +1104,7 @@ const tagUse = n => allT().filter(t => (t.tags||[]).includes(n));
 /* ---------- settings ---------- */
 const byName = (a,b) => String(a.name||'').localeCompare(String(b.name||''), 'fr');
 const plural = (n, w) => n + ' ' + w + (n > 1 ? 's' : '');
+function pcolorSel(p){ return colorSel(`data-pc="${esc(p.id)}" title="Couleur de ${esc(p.name||'la personne')}"`, personColor(p.id)); }
 function colorSel(attrs, cur){ return `<select ${attrs} aria-label="Couleur">${COLORS.map(([v,l]) => `<option value="${v}"${v===cur?' selected':''}>${l}</option>`).join('')}</select>`; }
 function personUse(id, f){
   const np = allP().filter(p => (p[f]||[]).includes(id)).length;
@@ -1150,13 +1152,13 @@ function renderSettings(){
           <button class="btn primary" type="button" data-sact="usave" data-id="${id}"${dis}>Créer le compte</button><button class="btn" type="button" data-sact="ucancel">Annuler</button></div>`;
       else if(ed.pid === p.id && ed.mode === 'pwd') extra = `<div class="uform">${pwdField(p.id)}<button class="btn primary" type="button" data-sact="usave" data-id="${id}"${dis}>Enregistrer le mot de passe</button><button class="btn" type="button" data-sact="ucancel">Annuler</button></div>`;
       else if(ed.pid === p.id && ed.mode === 'del') extra = `<div class="uform confirm"><span>Supprimer le compte de ${esc(p.name||'cette personne')} ? Elle ne pourra plus se connecter. Ses projets et tâches ne changent pas.</span><button class="btn" type="button" data-sact="ucancel">Annuler</button><button class="btn danger" type="button" data-sact="usave" data-id="${id}"${dis}>Supprimer</button></div>`;
-      if(u) return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${id}" aria-label="Nom">
+      if(u) return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${id}" aria-label="Nom">${pcolorSel(p)}
         <select data-urole="${id}" aria-label="Rôle de ${esc(p.name||'')}"${self || busy ? ' disabled' : ''}${self ? ' title="Tu ne peux pas modifier ton propre rôle"' : ''}>${roleOpts(u.role)}</select>
         <div class="sx"><input type="email" value="${esc(u.email)}" data-uemail="${id}" aria-label="Email de ${esc(p.name||'')}"${self || busy ? ' disabled' : ''}>
           ${ed.pid === p.id ? '' : `<button class="btn" type="button" data-sact="upwd" data-id="${id}"${dis}>${self ? 'Mon mot de passe' : 'Nouveau mot de passe'}</button>${self ? '' : `<button class="btn danger" type="button" data-sact="udel" data-id="${id}"${dis}>Supprimer le compte</button>`}`}</div>${extra}</div>`;
       if(ed.pid === p.id && ed.mode === 'pdel'){ const u = personUseAll(p.id);
         extra = `<div class="uform confirm"><span>Supprimer ${esc(p.name||'cette personne')} de l’application ?${u.n ? ` Son nom sera retiré de ${esc(u.text)}.` : ''}</span><button class="btn" type="button" data-sact="ucancel">Annuler</button><button class="btn danger" type="button" data-sact="pdelok" data-id="${id}"${dis}>Supprimer</button></div>`; }
-      return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${id}" aria-label="Nom">
+      return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${id}" aria-label="Nom">${pcolorSel(p)}
         ${ed.pid === p.id ? '' : `<span class="sact"><button class="btn" type="button" data-sact="ucreate" data-id="${id}"${dis}>Créer un compte</button><button class="btn danger" type="button" data-sact="pdel" data-id="${id}"${dis}>Supprimer</button></span>`}${extra}</div>`; };
     body = `<p class="muted shelp">Chaque compte se connecte avec son <strong>email et son mot de passe</strong>. Tout le monde voit tous les projets et toutes les tâches. <strong>Lecture seule</strong> : consulte sans rien modifier. <strong>Membre</strong> : peut créer, modifier et supprimer projets et tâches. <strong>Administrateur</strong> : comme un membre, avec en plus l’accès aux paramètres et aux comptes.</p>
     <p class="muted shelp">Pour créer un compte : « Créer un compte », saisis l’email, un mot de passe provisoire (ou « Générer »), choisis le rôle, puis transmets l’email et le mot de passe à la personne. Elle pourra ensuite le changer avec « Mon mot de passe ».</p>
@@ -1361,6 +1363,7 @@ function settingsChange(e){
     tagUse(old).forEach(t => patch('t', t.id, {tags: t.tags.map(x => x === old ? v : x)}));
     renderPanel(); return;
   }
+  if(el.dataset.pc){ const p = S.people.get(el.dataset.pc), v = okColor(el.value); if(p && v !== p.color) patchPerson(p.id, {color:v}); renderPanel(); return; }
   if(el.dataset.pn){ const v = el.value.trim(); const p = S.people.get(el.dataset.pn); if(p && v && v !== p.name) patchPerson(p.id, {name:v}); else renderPanel(); return; }
   if(el.dataset.cf){
     const cl = clientList(), c = cl[+el.dataset.i], k = el.dataset.cf; if(!c || !['rs','ice','addr'].includes(k)) return;
