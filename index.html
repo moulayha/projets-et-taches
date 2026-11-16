@@ -1015,7 +1015,7 @@ function renderPanel(){
       ${summary}${linked}
       <div class="sect"><h3><label for="f-notes">Notes</label></h3><textarea id="f-notes" data-field="notes" placeholder="Contacts, références, détails pratiques…">${esc(it.notes||'')}</textarea></div>
       ${ro ? '' : (S.confirmDel
-        ? `<div class="confirm"><span>Supprimer définitivement ${kind==='p'?'ce projet':'cette tâche'} ? Cette action ne peut pas être annulée.</span><button class="btn" type="button" data-act="nodel">Annuler</button><button class="btn danger" type="button" data-act="yesdel">Supprimer</button></div>`
+        ? `<div class="confirm"><span>Supprimer définitivement ${kind==='p' ? ((n => n ? `ce projet et ${n > 1 ? 'ses '+n+' tâches' : 'sa tâche'}` : 'ce projet')(allT().filter(t => t.project === id).length)) : 'cette tâche'} ? Cette action ne peut pas être annulée.</span><button class="btn" type="button" data-act="nodel">Annuler</button><button class="btn danger" type="button" data-act="yesdel">Supprimer</button></div>`
         : `<div><button class="btn danger" type="button" data-act="del">Supprimer ${kind==='p'?'le projet':'la tâche'}</button></div>`)}
     </div>`;
   if(ro) panel.querySelectorAll('input,select,textarea').forEach(el => el.disabled = true);
@@ -1063,12 +1063,18 @@ function create(kind, preset){
 async function removeItem(kind, id){
   if(!S.db || S.readOnly) return;
   const map = mapOf(kind);
-  map.delete(id); closePanel(); renderMain();
+  const goneT = new Set(kind === 'p' ? allT().filter(t => t.project === id).map(t => t.id) : [id]);
+  map.delete(id); goneT.forEach(t => S.tasks.delete(t)); closePanel(); renderMain();
   await enqueue(colName(kind) + '/' + id, () => S.db.doc(colName(kind) + '/' + id).delete());
+  if(kind === 'p') for(const t of goneT) await enqueue('tasks/' + t, () => S.db.doc('tasks/' + t).delete());
   const jobs = [];
-  if(kind === 'p') allT().filter(t => t.project === id).forEach(t => jobs.push(['t', t.id, {project:null}]));
-  else allT().filter(t => t.parent === id).forEach(t => jobs.push(['t', t.id, {parent:null}]));
-  [...map.values()].filter(x => (x.blockedBy||[]).includes(id)).forEach(x => jobs.push([kind, x.id, {blockedBy: x.blockedBy.filter(b => b !== id)}]));
+  if(kind === 'p') allP().filter(x => (x.blockedBy||[]).includes(id)).forEach(x => jobs.push(['p', x.id, {blockedBy: x.blockedBy.filter(b => b !== id)}]));
+  allT().forEach(t => {
+    const d = {};
+    if(t.parent && goneT.has(t.parent)) d.parent = null;
+    if((t.blockedBy||[]).some(b => goneT.has(b))) d.blockedBy = t.blockedBy.filter(b => !goneT.has(b));
+    if(Object.keys(d).length) jobs.push(['t', t.id, d]);
+  });
   for(const j of jobs) await patch(j[0], j[1], j[2]);
 }
 async function addPerson(name, roles){
