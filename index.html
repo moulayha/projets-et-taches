@@ -423,6 +423,7 @@ S.rSort = ['desc','asc','name'].includes(LS.get('pt.rsort','')) ? LS.get('pt.rso
 S.fOwner = LS.get('pt.fowner', '');
 S.fClient = LS.get('pt.fclient', '');
 S.fPOwner = LS.get('pt.fpowner', '');
+S.calFp = LS.get('pt.calfp', ''); S.calFt = LS.get('pt.calft', '');
 S.tlScale = LS.get('pt.tlscale', 'sem') === 'jour' ? 'jour' : 'sem';
 S.wSort =['desc','many','few'].includes(LS.get('pt.wsort','')) ? LS.get('pt.wsort','') : '';
 ['pSort','tSort'].forEach(sk => { try { const s = JSON.parse(LS.get('pt.' + sk.toLowerCase(), 'null')); if(s && typeof s.k === 'string' && (s.dir === 1 || s.dir === -1)) S[sk] = s; } catch(e){} });
@@ -701,6 +702,16 @@ function calendar(ps, kind){
   kind = kind || 'p';
   const isT = kind === 't', STL = isT ? TSTAT : PSTAT, noun = isT ? 'tâche' : 'projet';
   const k0 = isT ? 'due' : 'start', k1 = isT ? 'due' : 'end';
+  const fk = 'calF' + kind, groups = isT ? [['__open','Non terminées']] : [['__prog','Actifs'],['__done','Clos']];
+  let fs = S[fk] || '';
+  if(fs && !groups.some(g => g[0] === fs) && !STL.some(s => s.n === fs)) fs = '';
+  const allPs = ps;
+  const keep = x => !fs ? true : fs === '__open' ? !isDoneT(x) : fs === '__prog' ? (find(STL, x.status)||{}).g === 'prog' : fs === '__done' ? (find(STL, x.status)||{}).g === 'done' : x.status === fs;
+  ps = ps.filter(keep);
+  const cnt = f => allPs.filter(x => { const o = fs; fs = f; const r = keep(x); fs = o; return r; }).length;
+  const fbar = `<div class="sortbar filterbar"><label for="calf-${kind}">État d’avancement</label><select id="calf-${kind}" data-calf="${kind}"><option value="">Tous (${allPs.length})</option>
+    ${groups.map(([v,l]) => `<option value="${v}"${fs === v ? ' selected' : ''}>${l} (${cnt(v)})</option>`).join('')}
+    <optgroup label="États">${STL.map(s => `<option value="${esc(s.n)}"${fs === s.n ? ' selected' : ''}>${esc(s.n)} (${cnt(s.n)})</option>`).join('')}</optgroup></select>${fs ? `<button type="button" class="btn" data-calfclear="${kind}">Effacer le filtre</button>` : ''}</div>`;
   const t = today();
   if(!S.calM) S.calM = new Date(t.getFullYear(), t.getMonth(), 1);
   const m = S.calM, first = new Date(m.getFullYear(), m.getMonth(), 1), last = new Date(m.getFullYear(), m.getMonth()+1, 0);
@@ -739,7 +750,7 @@ function calendar(ps, kind){
   const label = fmtM.format(m);
   const undShown = isT ? undated.filter(x => !isDoneT(x)) : undated;
   const und = undShown.length ? `<div class="undated"><span>${isT ? 'Sans date limite' : 'Sans date'} :</span>${undShown.map(p => `<button type="button" data-open="${kind}:${esc(p.id)}">${esc(p.name||'Sans titre')}</button>`).join('')}</div>` : '';
-  return `<div class="cal"><div class="cal-hd"><h3>${esc(label.charAt(0).toUpperCase() + label.slice(1))}</h3><span class="muted">${inMonth} ${noun}${inMonth > 1 ? 's' : ''} ce mois-ci</span>
+  return fbar + `<div class="cal"><div class="cal-hd"><h3>${esc(label.charAt(0).toUpperCase() + label.slice(1))}</h3><span class="muted">${inMonth} ${noun}${inMonth > 1 ? 's' : ''} ce mois-ci</span>
       <div class="cal-nav"><button type="button" class="btn" data-cal="today">Aujourd’hui</button><button type="button" class="btn" data-cal="-1" aria-label="Mois précédent">‹</button><button type="button" class="btn" data-cal="1" aria-label="Mois suivant">›</button></div></div>
     <div class="cal-wh">${['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].map(d => `<span>${d}</span>`).join('')}</div>${weeks}</div>${und}`;
 }
@@ -1334,6 +1345,8 @@ function settingsChange(e){
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
   const tab = e.target.closest('[data-pv],[data-tv]');
+  const cfc = e.target.closest('[data-calfclear]');
+  if(cfc){ const k = cfc.dataset.calfclear; S['calF' + k] = ''; LS.set('pt.calf' + k, ''); renderMain(); const d = document.getElementById('calf-' + k); if(d) d.focus(); return; }
   const cal = e.target.closest('[data-cal]');
   if(cal){ const t = today(), m = S.calM || new Date(t.getFullYear(), t.getMonth(), 1);
     S.calM = cal.dataset.cal === 'today' ? new Date(t.getFullYear(), t.getMonth(), 1) : new Date(m.getFullYear(), m.getMonth() + Number(cal.dataset.cal), 1);
@@ -1358,6 +1371,7 @@ document.addEventListener('change', e => {
   if(e.target.id === 'fPOwner'){ S.fPOwner = e.target.value; LS.set('pt.fpowner', S.fPOwner); renderMain(); const d = $('#fPOwner'); if(d) d.focus(); return; }
   if(e.target.id === 'fClient'){ S.fClient = e.target.value; LS.set('pt.fclient', S.fClient); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
   if(e.target.id === 'fOwner'){ S.fOwner = e.target.value; LS.set('pt.fowner', S.fOwner); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
+  if(e.target.dataset && e.target.dataset.calf){ const k = e.target.dataset.calf; S['calF' + k] = e.target.value; LS.set('pt.calf' + k, e.target.value); renderMain(); const d = document.getElementById('calf-' + k); if(d) d.focus(); return; }
   if(e.target.id === 'tlscale'){ S.tlScale = e.target.value === 'jour' ? 'jour' : 'sem'; LS.set('pt.tlscale', S.tlScale); S.tlJump = true; renderMain(); const d = $('#tlscale'); if(d) d.focus(); return; }
   if(['dsort','csort','rsort','wsort'].includes(e.target.id)){ const id = e.target.id, k = id[0] + 'Sort';
     S[k] = e.target.value; LS.set('pt.' + id, S[k]); renderMain(); const d = document.getElementById(id); if(d) d.focus(); return; }
