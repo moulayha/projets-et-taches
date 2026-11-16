@@ -176,6 +176,27 @@ table.grid{border-collapse:collapse;width:100%;font-size:13.5px}
 .tbar span{position:relative}
 .tl-today{position:absolute;top:0;bottom:0;width:2px;background:var(--danger);opacity:.7;pointer-events:none}
 .tl-today b{position:absolute;top:2px;left:4px;font:500 10.5px var(--mono);color:var(--danger);white-space:nowrap}
+.cal{border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
+.cal-hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--line)}
+.cal-hd h3{margin:0;font-size:18px}
+.cal-hd .muted{font-size:13px}
+.cal-nav{margin-left:auto;display:flex;gap:6px}
+.cal-nav .btn{min-width:36px}
+.cal-wh{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--line)}
+.cal-wh span{padding:6px 8px;font-size:12px;font-weight:600;color:var(--muted);text-align:center}
+.cal-wk{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));column-gap:0;row-gap:3px;border-bottom:1px solid var(--line);min-height:96px}
+.cal-wk:last-child{border-bottom:0}
+.cal-d{grid-row:1 / -1;border-left:1px solid var(--line);padding:5px 6px;text-align:center}
+.cal-d:first-child{border-left:0}
+.cal-d span{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;border-radius:12px;font-size:13px;font-weight:500}
+.cal-d.we{background:color-mix(in srgb, var(--line) 30%, transparent)}
+.cal-d.out span{color:var(--muted);opacity:.6}
+.cal-d.td span{background:var(--danger);color:#fff;font-weight:700}
+.cal-bar{position:relative;z-index:1;margin:0 4px;height:22px;border:0;border-radius:6px;padding:0 7px;font-size:12px;font-weight:600;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;min-width:0}
+.cal-bar.cut0{margin-left:0;border-top-left-radius:0;border-bottom-left-radius:0}
+.cal-bar.cut1{margin-right:0;border-top-right-radius:0;border-bottom-right-radius:0}
+.cal-bar:hover{filter:brightness(.95)}
+@media (max-width:640px){.cal-wh span{padding:6px 2px;font-size:11px}.cal-bar{font-size:11px;padding:0 4px;margin:0 2px}.cal-wk{min-height:72px}}
 .undated{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;color:var(--muted);font-size:13px}
 .undated button{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:2px 8px;cursor:pointer}
 
@@ -378,7 +399,7 @@ const PRIO = [{n:'Basse',c:'green'},{n:'Moyenne',c:'yellow'},{n:'Haute',c:'red'}
 const BILL = [{n:'Non facturé',c:'gray'},{n:'Devis envoyé',c:'blue'},{n:'Acompte facturé',c:'yellow'},{n:'Facturé',c:'orange'},{n:'Payé',c:'green'}];
 const TAGS = [{n:'Mobilier',c:'brown'},{n:'Production',c:'red'},{n:'Scénographie',c:'purple'},{n:'Signalétique',c:'blue'},{n:'Logistique',c:'orange'},{n:'Prestataires',c:'green'}];
 const PALETTE = ['purple','blue','red','green','orange','pink','yellow','brown'];
-const PVIEWS = [['actifs','Actifs'],['chrono','Chronologie'],['kanban','Kanban'],['tous','Tous les projets'],['statut','Répartition par statut'],['client','Par client']];
+const PVIEWS = [['actifs','Actifs'],['chrono','Chronologie'],['calendrier','Calendrier'],['kanban','Kanban'],['tous','Tous les projets'],['statut','Répartition par statut'],['client','Par client']];
 const TVIEWS = [['parprojet','Par projet'],['kanban','Kanban'],['toutes','Toutes les tâches'],['rendement','Tâches à faire par semaine'],['retard','Retard moyen par équipe'],['charge','Charge par personne']];
 const find = (list, n) => list.find(s => s.n === n);
 
@@ -635,6 +656,7 @@ function viewProjectsOf(ps){
     }
     case 'chrono': return sortBar('p').replace(/<\/div>$/, `<label for="tlscale" class="tl-scale-l">Échelle</label><select id="tlscale"><option value="sem"${S.tlScale === 'sem' ? ' selected' : ''}>Par semaine</option><option value="jour"${S.tlScale === 'jour' ? ' selected' : ''}>Par jour</option></select></div>`) + timeline(sortRows(ps, S.pSort));
     case 'statut': return donut(ps);
+    case 'calendrier': return calendar(sortRows(ps, S.pSort));
   }
   return '';
 }
@@ -672,6 +694,43 @@ function timeline(ps){
     <div class="tl-rows">${weekends}<div class="tl-grid" style="--wk:${(byDay ? 1 : 7)*W}px;background-position:${byDay ? 0 : (((8 - (start.getDay()||7)) % 7))*W}px 0"></div>${rows}
       <div class="tl-today" style="left:${tl}px"><b>Aujourd’hui</b></div></div>
   </div></div>${und}`;
+}
+function calendar(ps){
+  const t = today();
+  if(!S.calM) S.calM = new Date(t.getFullYear(), t.getMonth(), 1);
+  const m = S.calM, first = new Date(m.getFullYear(), m.getMonth(), 1), last = new Date(m.getFullYear(), m.getMonth()+1, 0);
+  const gs = new Date(first); gs.setDate(gs.getDate() - ((gs.getDay()+6)%7));
+  const ge = new Date(last); ge.setDate(ge.getDate() + (7 - ((ge.getDay()+6)%7) - 1));
+  const dated = ps.map(p => ({p, s: parseD(p.start), e: parseD(p.end) || parseD(p.start)})).filter(x => x.s).map(x => x.e < x.s ? {...x, e: x.s} : x);
+  const undated = ps.filter(p => !parseD(p.start));
+  const inMonth = dated.filter(x => x.e >= first && x.s <= last).length;
+  let weeks = '';
+  for(let ws = new Date(gs); ws <= ge; ws = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+7)){
+    const we = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+6);
+    const segs = dated.filter(x => x.e >= ws && x.s <= we).map(x => {
+      const s = x.s < ws ? ws : x.s, e = x.e > we ? we : x.e;
+      return {...x, c0: diffDays(ws, s), c1: diffDays(ws, e), cut0: x.s < ws, cut1: x.e > we};
+    }).sort((a,b) => a.c0 - b.c0 || (b.c1 - b.c0) - (a.c1 - a.c0));
+    const lanes = [];
+    segs.forEach(g => { let l = lanes.findIndex(end => end < g.c0); if(l < 0){ l = lanes.length; lanes.push(-1); } lanes[l] = g.c1; g.lane = l; });
+    let cells = '';
+    for(let i=0;i<7;i++){
+      const d = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+i);
+      const cls = ['cal-d', d.getMonth() !== m.getMonth() ? 'out' : '', i >= 5 ? 'we' : '', +d === +t ? 'td' : ''].filter(Boolean).join(' ');
+      cells += `<div class="${cls}" style="grid-column:${i+1}"><span>${d.getDate()}</span></div>`;
+    }
+    const bars = segs.map(g => {
+      const st = find(PSTAT, g.p.status) || PSTAT[0], nm = g.p.name || 'Sans titre';
+      const tip = nm + ' · ' + (g.p.end && g.p.end !== g.p.start ? fd(g.p.start) + ' → ' + fd(g.p.end) : fd(g.p.start));
+      return `<button type="button" class="cal-bar c-${st.c}${g.cut0 ? ' cut0' : ''}${g.cut1 ? ' cut1' : ''}" data-open="p:${esc(g.p.id)}" title="${esc(tip)}" style="grid-column:${g.c0+1} / ${g.c1+2};grid-row:${g.lane+2}">${g.cut0 ? '← ' : ''}${esc(nm)}</button>`;
+    }).join('');
+    weeks += `<div class="cal-wk" style="grid-template-rows:30px repeat(${Math.max(lanes.length, 1)}, 24px) minmax(8px, 1fr)">${cells}${bars}</div>`;
+  }
+  const label = fmtM.format(m);
+  const und = undated.length ? `<div class="undated"><span>Sans date :</span>${undated.map(p => `<button type="button" data-open="p:${esc(p.id)}">${esc(p.name||'Sans titre')}</button>`).join('')}</div>` : '';
+  return `<div class="cal"><div class="cal-hd"><h3>${esc(label.charAt(0).toUpperCase() + label.slice(1))}</h3><span class="muted">${inMonth} projet${inMonth > 1 ? 's' : ''} ce mois-ci</span>
+      <div class="cal-nav"><button type="button" class="btn" data-cal="today">Aujourd’hui</button><button type="button" class="btn" data-cal="-1" aria-label="Mois précédent">‹</button><button type="button" class="btn" data-cal="1" aria-label="Mois suivant">›</button></div></div>
+    <div class="cal-wh">${['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].map(d => `<span>${d}</span>`).join('')}</div>${weeks}</div>${und}`;
 }
 function donut(ps){
   const data = PSTAT.map(s => ({...s, k: ps.filter(p => p.status === s.n).length})).filter(x => x.k);
@@ -1245,6 +1304,10 @@ function settingsChange(e){
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
   const tab = e.target.closest('[data-pv],[data-tv]');
+  const cal = e.target.closest('[data-cal]');
+  if(cal){ const t = today(), m = S.calM || new Date(t.getFullYear(), t.getMonth(), 1);
+    S.calM = cal.dataset.cal === 'today' ? new Date(t.getFullYear(), t.getMonth(), 1) : new Date(m.getFullYear(), m.getMonth() + Number(cal.dataset.cal), 1);
+    renderMain(); const b = document.querySelector(`[data-cal="${cal.dataset.cal}"]`); if(b) b.focus(); return; }
   if(e.target.closest('#fProjClear')){ S.fClient = ''; S.fPOwner = ''; LS.set('pt.fclient', ''); LS.set('pt.fpowner', ''); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
   if(e.target.closest('#fClientClear')){ S.fClient = ''; LS.set('pt.fclient', ''); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
   if(e.target.closest('#fOwnerClear')){ S.fOwner = ''; LS.set('pt.fowner', ''); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
