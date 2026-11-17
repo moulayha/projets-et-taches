@@ -601,7 +601,7 @@ function pCard(p){
   return `${p.code ? `<div class="meta mono">${esc(p.code)}</div>` : ''}<div class="t">${p.name ? esc(p.name) : '<span class="muted">Sans titre</span>'}</div>
     ${p.start ? `<div class="meta">${dateCell(p)}</div>` : ''}
     ${cardTasks(p.id)}
-    ${p.createdBy ? `<div class="meta">Créé par</div>${peopleCell([p.createdBy])}` : ''}`;
+    ${p.createdBy ? peopleCell([p.createdBy]) : ''}`;
 }
 function cardTasks(pid){
   const ts = tasksOf(pid).filter(t => !isDoneT(t)); if(!ts.length) return '';
