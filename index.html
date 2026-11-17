@@ -538,6 +538,7 @@ const PC = {
   status:{h:'État d’avancement',w:130,f:r=>statusPill(PSTAT,r.status)},
   tasks:{h:'Tâches',w:180,f:r=>refs(tasksOf(r.id).map(t=>t.id), S.tasks)},
   owners:{h:'Responsable',w:160,f:r=>peopleCell(r.owners)},
+  createdBy:{h:'Créé par',w:160,f:r=>peopleCell(r.createdBy ? [r.createdBy] : [])},
   dates:{h:'Dates',w:210,f:dateCell},
   prio:{h:'Priorité',w:90,f:r=>prioPill(r.priority)},
   prog:{h:'Progression',w:150,f:r=>progCell(r.id)},
@@ -550,7 +551,7 @@ const idx = (list, n) => { const i = list.findIndex(s => s.n === n); return i < 
 const PSORT = {
   code: r => r.code || null, name: r => r.name || null, client: r => r.client || null,
   status: r => idx(PSTAT, r.status), prio: r => idx(PRIO, r.priority), bill: r => idx(BILL, r.billing),
-  owners: r => peopleKey(r.owners) || null, pilot: r => peopleKey(r.pilots) || null, crea: r => peopleKey(r.creas) || null,
+  owners: r => peopleKey(r.owners) || null, createdBy: r => r.createdBy ? personName(r.createdBy) : null, pilot: r => peopleKey(r.pilots) || null, crea: r => peopleKey(r.creas) || null,
   dates: r => r.start || null, tasks: r => tasksOf(r.id).length || null, blocked: r => (r.blockedBy||[]).filter(b => S.projects.has(b)).length || null
 };
 function sortRows(rows, sort, kind){
@@ -582,7 +583,7 @@ const TSORT = {
   blocks: r => blocks(S.tasks, r.id).length || null
 };
 const SORTS = {p: PSORT, t: TSORT};
-const SORTOPTS = {p: [['dates','Date de début'],['prio','Priorité'],['name','Nom du projet'],['code','Code projet'],['client','Client'],['owners','Responsable'],['pilot','Pilote de projet'],['crea','Responsable créa'],['bill','État facturation'],['tasks','Nombre de tâches']], t: [['due','Date limite'],['prio','Priorité'],['name','Nom'],['owners','Responsable'],['project','Projet'],['tags','Étiquettes']]};
+const SORTOPTS = {p: [['dates','Date de début'],['prio','Priorité'],['name','Nom du projet'],['code','Code projet'],['client','Client'],['createdBy','Créé par'],['owners','Responsable'],['pilot','Pilote de projet'],['crea','Responsable créa'],['bill','État facturation'],['tasks','Nombre de tâches']], t: [['due','Date limite'],['prio','Priorité'],['name','Nom'],['owners','Responsable'],['project','Projet'],['tags','Étiquettes']]};
 function sortBar(kind){
   const sk = kind === 't' ? 'tSort' : 'pSort', cur = S[sk] && SORTOPTS[kind].some(o => o[0] === S[sk].k) ? S[sk] : null;
   return `<div class="sortbar"><label for="sortsel-${kind}">Trier par</label><select id="sortsel-${kind}" data-sortsel="${kind}"><option value="">Ordre de création</option>${SORTOPTS[kind].map(([k,l]) => `<option value="${k}"${cur && cur.k === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${cur ? `<button type="button" class="btn" data-sortdir="${kind}" aria-label="Inverser l’ordre">${cur.dir > 0 ? '↑ Croissant' : '↓ Décroissant'}</button>` : ''}</div>`;
@@ -600,7 +601,7 @@ function pCard(p){
   return `${p.code ? `<div class="meta mono">${esc(p.code)}</div>` : ''}<div class="t">${p.name ? esc(p.name) : '<span class="muted">Sans titre</span>'}</div>
     ${p.start ? `<div class="meta">${dateCell(p)}</div>` : ''}
     ${cardTasks(p.id)}
-    ${(p.owners||[]).length ? peopleCell(p.owners) : ''}`;
+    ${p.createdBy ? `<div class="meta">Créé par</div>${peopleCell([p.createdBy])}` : ''}`;
 }
 function cardTasks(pid){
   const ts = tasksOf(pid).filter(t => !isDoneT(t)); if(!ts.length) return '';
@@ -659,9 +660,9 @@ function viewProjectsOf(ps){
       const groups = PSTAT.filter(s => s.g === 'prog').map(s => ({s, items: ps.filter(p => p.status === s.n)})).filter(g => g.items.length);
       if(!groups.length) return emptyBox('Aucun projet actif', 'Les projets planifiés, en cours ou en pause apparaissent ici.');
       return groups.map(g => `<div class="group"><div class="ghead">${pill(g.s.n, g.s.c, 'status')}<span class="count">${g.items.length}</span></div>${
-        table([PC.code, PC.name, PC.status, PC.tasks, PC.owners, PC.pilot, PC.dates, PC.prio, PC.bill, PC.blocked], sortRows(g.items, S.pSort), 'p', S.pSort || {})}</div>`).join('');
+        table([PC.code, PC.name, PC.status, PC.tasks, PC.createdBy, PC.pilot, PC.dates, PC.prio, PC.bill, PC.blocked], sortRows(g.items, S.pSort), 'p', S.pSort || {})}</div>`).join('');
     }
-    case 'tous': return table([PC.code, PC.name, PC.status, PC.client, PC.owners, PC.pilot, PC.crea, PC.dates, PC.prio, PC.bill, PC.blocked], sortRows(ps, S.pSort), 'p', S.pSort || {});
+    case 'tous': return table([PC.code, PC.name, PC.status, PC.client, PC.createdBy, PC.pilot, PC.crea, PC.dates, PC.prio, PC.bill, PC.blocked], sortRows(ps, S.pSort), 'p', S.pSort || {});
     case 'kanban': return sortBar('p') + board(PSTAT.map(s => ({v:s.n, label:pill(s.n, s.c, 'status'), items: sortRows(ps.filter(p => p.status === s.n), S.pSort)})), 'p', 'status', pCard);
     case 'client': {
       const act = sortRows(ps, S.pSort);
