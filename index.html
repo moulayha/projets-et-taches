@@ -630,13 +630,13 @@ function clientFilter(all, f){
 }
 function projOwnerFilter(all, f){
   const counts = new Map(); let none = 0;
-  all.forEach(p => { const o = p.owners || []; if(!o.length) none++; o.forEach(id => counts.set(id, (counts.get(id) || 0) + 1)); });
+  all.forEach(p => { if(!p.createdBy) none++; else counts.set(p.createdBy, (counts.get(p.createdBy) || 0) + 1); });
   const ppl = [...counts.keys()].map(id => ({id, name: personName(id), n: counts.get(id)})).sort((a,b) => a.name.localeCompare(b.name, 'fr', {sensitivity:'base'}));
   const meOpt = S.me && counts.has(S.me.pid);
-  return `<label for="fPOwner">Responsable</label>
+  return `<label for="fPOwner">Créé par</label>
     <select id="fPOwner"><option value="">Tous (${all.length})</option>
       ${meOpt ? `<option value="__me"${f === '__me' ? ' selected' : ''}>Moi (${counts.get(S.me.pid)})</option>` : ''}
-      ${none ? `<option value="__none"${f === '__none' ? ' selected' : ''}>Non assigné (${none})</option>` : ''}
+      ${none ? `<option value="__none"${f === '__none' ? ' selected' : ''}>Non renseigné (${none})</option>` : ''}
       <optgroup label="Personnes">${ppl.map(p => `<option value="${esc(p.id)}"${f === p.id ? ' selected' : ''}>${esc(p.name)} (${p.n})</option>`).join('')}</optgroup>
     </select>`;
 }
@@ -647,8 +647,8 @@ function viewProjects(){
   if(f === '__none' ? !all.some(p => !p.client) : (f && !all.some(p => p.client === f))) f = '';
   const byClient = !f ? all : f === '__none' ? all.filter(p => !p.client) : all.filter(p => p.client === f);
   const oid = o === '__me' ? (S.me && S.me.pid) : o;
-  if(o === '__none' ? !byClient.some(p => !(p.owners||[]).length) : (o && !byClient.some(p => (p.owners||[]).includes(oid)))) o = '';
-  const ps = !o ? byClient : o === '__none' ? byClient.filter(p => !(p.owners||[]).length) : byClient.filter(p => (p.owners||[]).includes(oid));
+  if(o === '__none' ? !byClient.some(p => !p.createdBy) : (o && !byClient.some(p => p.createdBy === oid))) o = '';
+  const ps = !o ? byClient : o === '__none' ? byClient.filter(p => !p.createdBy) : byClient.filter(p => p.createdBy === oid);
   const bar = clientFilter(all, f).replace(/(<button type="button" class="btn" id="fClientClear">[^<]*<\/button>)?<\/div>$/, '')
     + projOwnerFilter(byClient, o)
     + (f || o ? `<button type="button" class="btn" id="fProjClear">Effacer les filtres</button>` : '') + `</div>`;
