@@ -433,6 +433,7 @@ S.dSort = ['desc','asc','name'].includes(LS.get('pt.dsort','')) ? LS.get('pt.dso
 S.cSort = ['asc','name'].includes(LS.get('pt.csort','')) ? LS.get('pt.csort','') : '';
 S.rSort = ['desc','asc','name'].includes(LS.get('pt.rsort','')) ? LS.get('pt.rsort','') : '';
 S.fOwner = LS.get('pt.fowner', '');
+S.fTStat = LS.get('pt.ftstat', '');
 S.fClient = LS.get('pt.fclient', '');
 S.fPOwner = LS.get('pt.fpowner', '');
 S.calFp = LS.get('pt.calfp', ''); S.calFt = LS.get('pt.calft', '');
@@ -785,16 +786,23 @@ function donut(ps){
 }
 
 /* ---------- task views ---------- */
-function ownerFilter(all, f){
+function ownerFilter(all, f, byOwner, st){
   const counts = new Map(); let none = 0;
   all.forEach(t => { const o = t.owners || []; if(!o.length) none++; o.forEach(id => counts.set(id, (counts.get(id) || 0) + 1)); });
   const ppl = [...counts.keys()].map(id => ({id, name: personName(id), n: counts.get(id)})).sort((a,b) => a.name.localeCompare(b.name, 'fr', {sensitivity:'base'}));
   const me = S.me && counts.has(S.me.pid) ? `<option value="${esc(S.me.pid)}"${f === S.me.pid ? ' selected' : ''}>Moi (${counts.get(S.me.pid)})</option>` : '';
+  const showSt = S.tView !== 'calendrier';
+  const nOpen = byOwner.filter(t => !isDoneT(t)).length;
+  const stSel = showSt ? `<label for="fTStat">État d’avancement</label>
+    <select id="fTStat"><option value="">Tous (${byOwner.length})</option>
+      ${nOpen && nOpen < byOwner.length ? `<option value="__open"${st === '__open' ? ' selected' : ''}>Non terminées (${nOpen})</option>` : ''}
+      <optgroup label="États">${TSTAT.map(s => ({s, n: byOwner.filter(t => t.status === s.n).length})).filter(x => x.n).map(x => `<option value="${esc(x.s.n)}"${st === x.s.n ? ' selected' : ''}>${esc(x.s.n)} (${x.n})</option>`).join('')}</optgroup>
+    </select>` : '';
   return `<div class="sortbar filterbar"><label for="fOwner">Responsable</label>
     <select id="fOwner"><option value="">Tous (${all.length})</option>${me}
       ${none ? `<option value="__none"${f === '__none' ? ' selected' : ''}>Non assigné (${none})</option>` : ''}
       <optgroup label="Personnes">${ppl.map(p => `<option value="${esc(p.id)}"${f === p.id && (!S.me || p.id !== S.me.pid || !me) ? ' selected' : ''}>${esc(p.name)} (${p.n})</option>`).join('')}</optgroup>
-    </select>${f ? `<button type="button" class="btn" id="fOwnerClear">Effacer le filtre</button>` : ''}</div>`;
+    </select>${stSel}${f || (showSt && st) ? `<button type="button" class="btn" id="fOwnerClear">Effacer ${f && showSt && st ? 'les filtres' : 'le filtre'}</button>` : ''}</div>`;
 }
 function viewTasks(){
   const all = tasks();
@@ -802,8 +810,11 @@ function viewTasks(){
   let f = S.fOwner || '';
   if(f && f !== '__none' && !all.some(t => (t.owners||[]).includes(f))) f = '';
   if(f === '__none' && !all.some(t => !(t.owners||[]).length)) f = '';
-  const ts = !f ? all : f === '__none' ? all.filter(t => !(t.owners||[]).length) : all.filter(t => (t.owners||[]).includes(f));
-  return ownerFilter(all, f) + viewTasksOf(ts);
+  const byOwner = !f ? all : f === '__none' ? all.filter(t => !(t.owners||[]).length) : all.filter(t => (t.owners||[]).includes(f));
+  let st = S.fTStat || '';
+  if(st === '__open' ? !byOwner.some(t => !isDoneT(t)) : (st && !byOwner.some(t => t.status === st))) st = '';
+  const ts = S.tView === 'calendrier' || !st ? byOwner : st === '__open' ? byOwner.filter(t => !isDoneT(t)) : byOwner.filter(t => t.status === st);
+  return ownerFilter(all, f, byOwner, st) + (ts.length ? viewTasksOf(ts) : emptyBox('Aucune tâche', 'Aucune tâche ne correspond à ces filtres.'));
 }
 function viewTasksOf(ts){
   const cols = [TC.name, TC.status, TC.owners, TC.due, TC.prio, TC.tags, TC.blocked, TC.blocks];
@@ -1415,7 +1426,7 @@ document.addEventListener('click', e => {
     renderMain(); const b = document.querySelector(`[data-cal="${cal.dataset.cal}"]`); if(b) b.focus(); return; }
   if(e.target.closest('#fProjClear')){ S.fClient = ''; S.fPOwner = ''; LS.set('pt.fclient', ''); LS.set('pt.fpowner', ''); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
   if(e.target.closest('#fClientClear')){ S.fClient = ''; LS.set('pt.fclient', ''); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
-  if(e.target.closest('#fOwnerClear')){ S.fOwner = ''; LS.set('pt.fowner', ''); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
+  if(e.target.closest('#fOwnerClear')){ S.fOwner = ''; LS.set('pt.fowner', ''); S.fTStat = ''; LS.set('pt.ftstat', ''); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
   const sd = e.target.closest('[data-sortdir]');
   if(sd){ const sk = sd.dataset.sortdir === 't' ? 'tSort' : 'pSort'; if(S[sk]){ S[sk] = {k:S[sk].k, dir:-S[sk].dir}; LS.set('pt.' + sk.toLowerCase(), JSON.stringify(S[sk])); renderMain(); const b = document.querySelector(`[data-sortdir="${sd.dataset.sortdir}"]`); if(b) b.focus(); } return; }
   const so = e.target.closest('[data-sort]');
@@ -1433,6 +1444,7 @@ document.addEventListener('change', e => {
   if(e.target.id === 'fPOwner'){ S.fPOwner = e.target.value; LS.set('pt.fpowner', S.fPOwner); renderMain(); const d = $('#fPOwner'); if(d) d.focus(); return; }
   if(e.target.id === 'fClient'){ S.fClient = e.target.value; LS.set('pt.fclient', S.fClient); renderMain(); const d = $('#fClient'); if(d) d.focus(); return; }
   if(e.target.id === 'fOwner'){ S.fOwner = e.target.value; LS.set('pt.fowner', S.fOwner); renderMain(); const d = $('#fOwner'); if(d) d.focus(); return; }
+  if(e.target.id === 'fTStat'){ S.fTStat = e.target.value; LS.set('pt.ftstat', S.fTStat); renderMain(); const d = $('#fTStat'); if(d) d.focus(); return; }
   if(e.target.dataset && e.target.dataset.calf){ const k = e.target.dataset.calf; S['calF' + k] = e.target.value; LS.set('pt.calf' + k, e.target.value); renderMain(); const d = document.getElementById('calf-' + k); if(d) d.focus(); return; }
   if(e.target.id === 'tlscale'){ S.tlScale = e.target.value === 'jour' ? 'jour' : 'sem'; LS.set('pt.tlscale', S.tlScale); S.tlJump = true; renderMain(); const d = $('#tlscale'); if(d) d.focus(); return; }
   if(['dsort','csort','rsort','wsort'].includes(e.target.id)){ const id = e.target.id, k = id[0] + 'Sort';
