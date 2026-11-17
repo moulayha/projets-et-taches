@@ -263,6 +263,9 @@ body{margin:0}
 [hidden]{display:none !important}
 .stabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);padding:0 12px;scrollbar-width:thin}
 .shelp{margin:0;font-size:13px}
+.pacts{display:flex;flex-wrap:wrap;gap:8px}
+.archnote{margin:0;padding:8px 12px;border-radius:8px;background:var(--hover);color:var(--muted);font-size:13px}
+.archhelp{margin:0 0 10px}
 .slist{display:flex;flex-direction:column;gap:6px}
 .srow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:6px 8px}
 .srow input[type=text]{flex:1 1 140px;min-width:0;border:1px solid transparent;background:none;border-radius:6px;padding:4px 6px;font-weight:500}
@@ -413,8 +416,8 @@ function cleanTags(x){
   return x.filter(t => t && typeof t.n === 'string' && t.n.trim() && !seen.has(t.n.toLowerCase()) && seen.add(t.n.toLowerCase())).map(t => ({n:t.n, c:okColor(t.c)}));
 }
 const PALETTE = ['purple','blue','red','green','orange','pink','yellow','brown'];
-const PVIEWS = [['tous','Tous les projets'],['actifs','Actifs'],['chrono','Chronologie'],['calendrier','Calendrier'],['kanban','Kanban'],['statut','Répartition par statut'],['client','Par client']];
-const TVIEWS = [['toutes','Toutes les tâches'],['parprojet','Par projet'],['kanban','Kanban'],['calendrier','Calendrier'],['rendement','Tâches à faire par semaine'],['retard','Retard moyen par équipe'],['charge','Charge par personne']];
+const PVIEWS = [['tous','Tous les projets'],['actifs','Actifs'],['chrono','Chronologie'],['calendrier','Calendrier'],['kanban','Kanban'],['statut','Répartition par statut'],['client','Par client'],['archives','Archives']];
+const TVIEWS = [['toutes','Toutes les tâches'],['parprojet','Par projet'],['kanban','Kanban'],['calendrier','Calendrier'],['rendement','Tâches à faire par semaine'],['retard','Retard moyen par équipe'],['charge','Charge par personne'],['archives','Archives']];
 const find = (list, n) => list.find(s => s.n === n);
 
 const LS = {
@@ -463,8 +466,8 @@ const mineP = p => !!(S.me && p && [...(p.owners||[]), ...(p.pilots||[]), ...(p.
 const mineT = t => !!(S.me && ((t.owners||[]).includes(S.me.pid) || (t.project && mineP(S.projects.get(t.project)))));
 const allP = () => [...S.projects.values()];
 const allT = () => [...S.tasks.values()];
-const projects = () => [...S.projects.values()].filter(p => !S.mine || mineP(p)).sort(byCreated);
-const tasks = () => [...S.tasks.values()].filter(t => !S.mine || mineT(t)).sort(byCreated);
+const projects = () => [...S.projects.values()].filter(p => !p.archivedAt && (!S.mine || mineP(p))).sort(byCreated);
+const tasks = () => [...S.tasks.values()].filter(t => !t.archivedAt && (!S.mine || mineT(t))).sort(byCreated);
 function renderMine(){
   const b = $('#mineBtn'); if(!b) return;
   b.setAttribute('aria-pressed', S.mine ? 'true' : 'false');
@@ -482,7 +485,7 @@ function clientList(){
     const o = {n:c.n, c: c.c ? okColor(c.c) : hashColor(c.n)};
     ['rs','ice','addr'].forEach(k => { if(typeof c[k] === 'string' && c[k]) o[k] = c[k]; });
     names.set(c.n, o); } });
-  projects().forEach(p => { if(p.client && !names.has(p.client)) names.set(p.client, {n:p.client, c:hashColor(p.client)}); });
+  allP().forEach(p => { if(p.client && !names.has(p.client)) names.set(p.client, {n:p.client, c:hashColor(p.client)}); });
   return [...names.values()];
 }
 function clientColor(n){ const c = clientList().find(x => x.n === n); return c ? c.c : hashColor(n); }
@@ -642,6 +645,7 @@ function projOwnerFilter(all, f){
     </select>`;
 }
 function viewProjects(){
+  if(S.pView === 'archives') return archiveView('p');
   const all = projects();
   if(!all.length) return emptyBox('Aucun projet pour l’instant', 'Crée le premier avec « Nouveau projet ».');
   let f = S.fClient || '', o = S.fPOwner || '';
@@ -805,6 +809,7 @@ function ownerFilter(all, f, byOwner, st){
     </select>${stSel}${f || (showSt && st) ? `<button type="button" class="btn" id="fOwnerClear">Effacer ${f && showSt && st ? 'les filtres' : 'le filtre'}</button>` : ''}</div>`;
 }
 function viewTasks(){
+  if(S.tView === 'archives') return archiveView('t');
   const all = tasks();
   if(!all.length) return emptyBox('Aucune tâche pour l’instant', 'Crée une tâche avec « Nouvelle tâche », ou depuis la fiche d’un projet.');
   let f = S.fOwner || '';
@@ -1033,14 +1038,16 @@ function renderPanel(){
   panel.innerHTML = `
     <div class="ph"><span class="kind">${kind === 'p' ? 'Projet' : 'Tâche'}</span>
       <button class="iconbtn" type="button" data-act="close" aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></div>
-    <div class="pbody ${ro ? 'ro' : ''}">${lockNote}
+    <div class="pbody ${ro ? 'ro' : ''}">${it.archivedAt ? `<p class="archnote">${kind==='p' ? 'Projet archivé' : 'Tâche archivée'} le ${esc(new Date(it.archivedAt).toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'}))}. ${kind==='p' ? 'Il' : 'Elle'} n’apparaît que dans la vue « Archives ».</p>` : ''}${lockNote}
       <input class="ptitle" id="f-name" data-field="name" value="${esc(it.name||'')}" placeholder="${kind==='p'?'Nom du projet':'Nom de la tâche'}" aria-label="Nom" autocomplete="off">
       <div class="props">${props}</div>
       ${summary}${linked}
       <div class="sect"><h3><label for="f-notes">Notes</label></h3><textarea id="f-notes" data-field="notes" placeholder="Contacts, références, détails pratiques…">${esc(it.notes||'')}</textarea></div>
       ${ro ? '' : (S.confirmDel
         ? `<div class="confirm"><span>Supprimer définitivement ${kind==='p' ? ((n => n ? `ce projet et ${n > 1 ? 'ses '+n+' tâches' : 'sa tâche'}` : 'ce projet')(allT().filter(t => t.project === id).length)) : 'cette tâche'} ? Cette action ne peut pas être annulée.</span><button class="btn" type="button" data-act="nodel">Annuler</button><button class="btn danger" type="button" data-act="yesdel">Supprimer</button></div>`
-        : `<div><button class="btn danger" type="button" data-act="del">Supprimer ${kind==='p'?'le projet':'la tâche'}</button></div>`)}
+        : `<div class="pacts">${it.archivedAt
+            ? `<button class="btn" type="button" data-act="unarch">Désarchiver ${kind==='p'?'le projet':'la tâche'}</button>`
+            : `<button class="btn" type="button" data-act="arch" title="${kind==='p' ? 'Retire le projet et ses tâches des vues, sans les supprimer' : 'Retire la tâche des vues, sans la supprimer'}">Archiver ${kind==='p'?'le projet':'la tâche'}</button>`}<button class="btn danger" type="button" data-act="del">Supprimer ${kind==='p'?'le projet':'la tâche'}</button></div>`)}
     </div>`;
   if(ro) panel.querySelectorAll('input,select,textarea').forEach(el => el.disabled = true);
   panel.hidden = false; scrim.hidden = false;
@@ -1103,6 +1110,27 @@ async function removeItem(kind, id){
     if(Object.keys(d).length) jobs.push(['t', t.id, d]);
   });
   for(const j of jobs) await patch(j[0], j[1], j[2]);
+}
+async function archiveItem(kind, id, on){
+  if(!S.db || S.readOnly) return;
+  const it = mapOf(kind).get(id); if(!it) return;
+  if(kind === 'p' && !canEditP(it)) return;
+  const ts = on ? Date.now() : null;
+  // un projet archivé emporte ses tâches ; en le désarchivant, on ramène celles archivées avec lui
+  const linked = kind === 'p' ? allT().filter(t => t.project === id && (on ? !t.archivedAt : t.archivedAt === it.archivedAt)) : [];
+  closePanel();
+  await patch(kind, id, {archivedAt: ts});
+  for(const t of linked) await patch('t', t.id, {archivedAt: ts});
+  const what = kind === 'p' ? 'Projet' : 'Tâche', e = kind === 'p' ? '' : 'e';
+  setSync(on ? `${what} archivé${e}${linked.length ? ` avec ${plural(linked.length,'tâche')}` : ''}. ${kind === 'p' ? 'Il' : 'Elle'} reste consultable dans la vue « Archives ».` : `${what} désarchivé${e}${linked.length ? ` avec ${plural(linked.length,'tâche')}` : ''}.`);
+}
+function archiveView(kind){
+  const list = (kind === 'p' ? allP().filter(p => p.archivedAt && (!S.mine || mineP(p))) : allT().filter(t => t.archivedAt && (!S.mine || mineT(t)))).sort((a,b) => b.archivedAt - a.archivedAt);
+  if(!list.length) return emptyBox(kind === 'p' ? 'Aucun projet archivé' : 'Aucune tâche archivée', kind === 'p' ? 'Le bouton « Archiver le projet », dans la fiche d’un projet, le retire des vues sans le supprimer.' : 'Le bouton « Archiver la tâche », dans la fiche d’une tâche, la retire des vues sans la supprimer.');
+  const AC = {h:'Archivé le', w:130, k:'_arch', f:r => `<span class="mono">${esc(new Date(r.archivedAt).toLocaleDateString('fr-FR'))}</span>`};
+  const cols = kind === 'p' ? [PC.code, PC.name, PC.status, PC.client, PC.createdBy, AC] : [TC.name, TC.status, TC.owners, TC.project, AC];
+  const n = list.length, s = n > 1 ? 's' : '';
+  return `<p class="muted shelp archhelp">${n} ${kind === 'p' ? `projet${s} archivé${s}` : `tâche${s} archivée${s}`}. Ouvre ${kind === 'p' ? 'un projet' : 'une tâche'} puis clique sur « Désarchiver » pour ${kind === 'p' ? 'le' : 'la'} remettre dans les vues.</p>` + table(cols, list, kind, {});
 }
 async function addPerson(name, roles){
   name = (name||'').trim(); if(!name || !S.db) return null;
@@ -1483,6 +1511,8 @@ panel.addEventListener('click', async e => {
     else if(a === 'del'){ S.confirmDel = true; renderPanel(); }
     else if(a === 'nodel'){ S.confirmDel = false; renderPanel(); }
     else if(a === 'yesdel') removeItem(kind, id);
+    else if(a === 'arch') archiveItem(kind, id, true);
+    else if(a === 'unarch') archiveItem(kind, id, false);
     else if(a === 'addtask') create('t', {project:id});
     else if(a === 'addperson'){ const pf = act.dataset.pf || 'owners'; const v = $('#f-newperson').value; const pid = await addPerson(v, [pf]); S.newPerson = false; if(pid) await patch(kind, id, {[pf]:[...(it[pf]||[]), pid]}); renderPanel(); }
     else if(a === 'addclient'){ await commitClient(); }
@@ -1622,8 +1652,8 @@ function subscribe(name, map, flag){
 }
 /* ---------- Supabase ---------- */
 const FMAP = {
-  projects: {start:'start_date', end:'end_date', blockedBy:'blocked_by', createdAt:'created_at', createdBy:'created_by'},
-  tasks: {doneOn:'done_on', blockedBy:'blocked_by', createdAt:'created_at'},
+  projects: {start:'start_date', end:'end_date', blockedBy:'blocked_by', createdAt:'created_at', createdBy:'created_by', archivedAt:'archived_at'},
+  tasks: {doneOn:'done_on', blockedBy:'blocked_by', createdAt:'created_at', archivedAt:'archived_at'},
   people: {createdAt:'created_at'}
 };
 const toRow = (t, o) => { const m = FMAP[t] || {}, r = {}; for(const k in o) if(k !== 'id') r[m[k] || k] = o[k]; return r; };
