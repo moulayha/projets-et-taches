@@ -465,7 +465,8 @@ function renderMine(){
   const p = S.me && S.people.get(S.me.pid);
   $('#whoName').textContent = p ? (p.name || '') + (' · ' + ({admin:'administrateur', member:'membre', viewer:'lecture seule'}[S.me.role] || '')) : '';
 }
-const tasksOf = pid => tasks().filter(t => t.project === pid);
+const canEditP = p => !!(S.db && !S.readOnly && p && (isAdmin() || (S.me && p.createdBy && p.createdBy === S.me.pid)));
+const tasksOf = pid =>tasks().filter(t => t.project === pid);
 const isDoneT = t => (find(TSTAT, t.status)||{}).g === 'done';
 const isDoneP = p => (find(PSTAT, p.status)||{}).g === 'done';
 function clientList(){
@@ -957,7 +958,8 @@ function renderPanel(){
   const {kind, id} = S.open; const map = kind === 'p' ? S.projects : S.tasks; const it = map.get(id);
   if(!it){ closePanel(); return; }
   S.panelDirty = false;
-  const ro = !S.db || S.readOnly;
+  const gro = !S.db || S.readOnly;
+  const ro = gro || (kind === 'p' && !canEditP(it));
   const peopleCtl = field => {
     const ids = it[field] || [];
     const free = [...S.people.values()].filter(p => !ids.includes(p.id) && inRole(p, field)).sort((a,b) => String(a.name).localeCompare(String(b.name), 'fr'));
@@ -986,7 +988,10 @@ function renderPanel(){
       <label for="f-priority">Priorité</label><div><select id="f-priority" data-field="priority">${opts(PRIO.map(p=>({v:p.n,l:p.n})), it.priority||'', '—')}</select></div>
       <label for="f-billing">État facturation</label><div><select id="f-billing" data-field="billing">${opts(BILL.map(b=>({v:b.n,l:b.n})), it.billing||'', '—')}</select></div>
       <span class="lab">Bloqué par</span>${blockCtl}
-      <span class="lab">Bloque</span><div>${refs(blockingList, map) || '<span class="muted">—</span>'}</div>`;
+      <span class="lab">Bloque</span><div>${refs(blockingList, map) || '<span class="muted">—</span>'}</div>
+      <label for="f-createdby">Créé par</label><div>${isAdmin() && !gro
+        ? `<select id="f-createdby" data-field="createdBy">${opts([...S.people.values()].filter(p => S.users.get(p.id)).sort((a,b) => String(a.name).localeCompare(String(b.name), 'fr')).map(p => ({v:p.id, l:p.name||'Sans nom'})), it.createdBy||'', '—')}</select>`
+        : (it.createdBy ? `<span class="chip">${avatar(it.createdBy)}${esc(personName(it.createdBy))}</span>` : '<span class="muted">—</span>')}</div>`;
   } else {
     const subs = tasks().filter(t => t.parent === id);
     props = `
@@ -1004,12 +1009,13 @@ function renderPanel(){
   }
   const linked = kind === 'p' ? `<div class="sect"><h3>Tâches du projet</h3><div class="linked">${
       tasksOf(id).map(t => `<button type="button" class="item" data-open="t:${esc(t.id)}"><span>${t.name ? esc(t.name) : '<span class="muted">Sans titre</span>'}</span>${statusPill(TSTAT, t.status)}</button>`).join('') || '<span class="muted">Aucune tâche liée.</span>'
-    }</div>${ro ? '' : `<div><button class="btn" type="button" data-act="addtask">+ Ajouter une tâche</button></div>`}</div>` : '';
+    }</div>${gro ? '' : `<div><button class="btn" type="button" data-act="addtask">+ Ajouter une tâche</button></div>`}</div>` : '';
+  const lockNote = kind === 'p' && ro && !gro ? `<p class="muted lock">Seule la personne qui a créé ce projet${it.createdBy ? ` (${esc(personName(it.createdBy))})` : ''} ou un administrateur peut le modifier.</p>` : '';
   const summary = kind === 'p' ? `<div class="sect"><h3><label for="f-summary">Résumé</label></h3><textarea id="f-summary" data-field="summary" rows="3" placeholder="Une phrase sur l’événement">${esc(it.summary||'')}</textarea></div>` : '';
   panel.innerHTML = `
     <div class="ph"><span class="kind">${kind === 'p' ? 'Projet' : 'Tâche'}</span>
       <button class="iconbtn" type="button" data-act="close" aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></div>
-    <div class="pbody ${ro ? 'ro' : ''}">
+    <div class="pbody ${ro ? 'ro' : ''}">${lockNote}
       <input class="ptitle" id="f-name" data-field="name" value="${esc(it.name||'')}" placeholder="${kind==='p'?'Nom du projet':'Nom de la tâche'}" aria-label="Nom" autocomplete="off">
       <div class="props">${props}</div>
       ${summary}${linked}
@@ -1044,6 +1050,7 @@ const mapOf = k => k === 'p' ? S.projects : S.tasks;
 function patch(kind, id, data){
   if(!S.db || S.readOnly) return;
   const map = mapOf(kind), cur = map.get(id); if(!cur) return;
+  if(kind === 'p' && !canEditP(cur)) return;
   map.set(id, {...cur, ...data});
   renderMain();
   const path = colName(kind) + '/' + id;
@@ -1056,6 +1063,7 @@ function create(kind, preset){
     ? {code:'', name:'', status:(PSTAT.find(s => s.g === 'todo') || PSTAT[0]).n, owners:[], pilots:[], creas:[], billing:null, start:null, end:null, priority:null, client:null, summary:'', blockedBy:[], notes:'', createdAt:Date.now()}
     : {name:'', status:'À faire', owners:[], due:null, doneOn:null, priority:null, tags:[], project:null, parent:null, blockedBy:[], notes:'', createdAt:Date.now()};
   const data = {...base, ...(preset||{})};
+  if(kind === 'p') data.createdBy = S.me ? S.me.pid : null;
   mapOf(kind).set(ref.id, {id:ref.id, ...data});
   renderMain(); openItem(kind, ref.id);
   enqueue(colName(kind) + '/' + ref.id, () => ref.set(data));
@@ -1063,12 +1071,13 @@ function create(kind, preset){
 async function removeItem(kind, id){
   if(!S.db || S.readOnly) return;
   const map = mapOf(kind);
+  if(kind === 'p' && !canEditP(map.get(id))) return;
   const goneT = new Set(kind === 'p' ? allT().filter(t => t.project === id).map(t => t.id) : [id]);
   map.delete(id); goneT.forEach(t => S.tasks.delete(t)); closePanel(); renderMain();
   await enqueue(colName(kind) + '/' + id, () => S.db.doc(colName(kind) + '/' + id).delete());
   if(kind === 'p') for(const t of goneT) await enqueue('tasks/' + t, () => S.db.doc('tasks/' + t).delete());
   const jobs = [];
-  if(kind === 'p') allP().filter(x => (x.blockedBy||[]).includes(id)).forEach(x => jobs.push(['p', x.id, {blockedBy: x.blockedBy.filter(b => b !== id)}]));
+  if(kind === 'p') allP().filter(x => (x.blockedBy||[]).includes(id) && canEditP(x)).forEach(x => jobs.push(['p', x.id, {blockedBy: x.blockedBy.filter(b => b !== id)}]));
   allT().forEach(t => {
     const d = {};
     if(t.parent && goneT.has(t.parent)) d.parent = null;
@@ -1553,6 +1562,7 @@ panel.addEventListener('focusout', () => {
 let dragKey = null;
 document.addEventListener('dragstart', e => {
   const c = e.target.closest && e.target.closest('[data-drag]'); if(!c || !S.db || S.readOnly) return;
+  if(c.dataset.drag.startsWith('p:') && !canEditP(S.projects.get(c.dataset.drag.slice(2)))){ e.preventDefault(); return; }
   dragKey = c.dataset.drag; c.classList.add('dragging');
   try { e.dataTransfer.setData('text/plain', dragKey); e.dataTransfer.effectAllowed = 'move'; } catch(_){}
 });
@@ -1593,7 +1603,7 @@ function subscribe(name, map, flag){
 }
 /* ---------- Supabase ---------- */
 const FMAP = {
-  projects: {start:'start_date', end:'end_date', blockedBy:'blocked_by', createdAt:'created_at'},
+  projects: {start:'start_date', end:'end_date', blockedBy:'blocked_by', createdAt:'created_at', createdBy:'created_by'},
   tasks: {doneOn:'done_on', blockedBy:'blocked_by', createdAt:'created_at'},
   people: {createdAt:'created_at'}
 };
