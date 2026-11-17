@@ -405,7 +405,7 @@ function cleanPstat(x){
   return out.length ? out : null;
 }
 const inRole = (p, f) => !Array.isArray(p.roles) || p.roles.includes(f);
-const TSTAT = [{n:'À faire',c:'gray',g:'todo'},{n:'En cours',c:'blue',g:'prog'},{n:'Terminé',c:'green',g:'done'},{n:'Archivé',c:'gray',g:'done'}];
+const TSTAT = [{n:'À faire',c:'gray',g:'todo'},{n:'En cours',c:'blue',g:'prog'},{n:'Terminé',c:'green',g:'done'}];
 const PRIO = [{n:'Basse',c:'green'},{n:'Moyenne',c:'yellow'},{n:'Haute',c:'red'}];
 const BILL = [{n:'Non facturé',c:'gray'},{n:'Devis envoyé',c:'blue'},{n:'Acompte facturé',c:'yellow'},{n:'Facturé',c:'orange'},{n:'Payé',c:'green'}];
 const DEFAULT_TAGS = [{n:'Mobilier',c:'brown'},{n:'Production',c:'red'},{n:'Scénographie',c:'purple'},{n:'Signalétique',c:'blue'},{n:'Logistique',c:'orange'},{n:'Prestataires',c:'green'}];
