@@ -264,6 +264,9 @@ body{margin:0}
 .stabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);padding:0 12px;scrollbar-width:thin}
 .shelp{margin:0;font-size:13px}
 .pacts{display:flex;flex-wrap:wrap;gap:8px}
+.pacts a.btn{text-decoration:none;display:inline-flex;align-items:center}
+.drive input{width:100%}
+.drivefr{width:100%;height:280px;border:1px solid var(--line);border-radius:8px;background:#fff;margin:8px 0}
 .hist summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
 .hist summary::-webkit-details-marker{display:none}
 .hist summary::before{content:"▸";color:var(--muted);font-size:12px;transition:transform .15s}
@@ -977,7 +980,7 @@ function setSync(text, warn){ const el = $('#sync'); el.textContent = text; el.c
 
 /* ---------- panel ---------- */
 const panel = $('#panel'), scrim = $('#scrim');
-function openItem(kind, id){ S.open = {kind, id}; S.confirmDel = false; S.newPerson = false; S.newClient = false; renderPanel(); const t = panel.querySelector('.ptitle'); if(t && !t.value) t.focus(); }
+function openItem(kind, id){ S.open = {kind, id}; S.confirmDel = false; S.driveErr = ''; S.newPerson = false; S.newClient = false; renderPanel(); const t = panel.querySelector('.ptitle'); if(t && !t.value) t.focus(); }
 function closePanel(){ S.open = null; panel.hidden = true; scrim.hidden = true; panel.innerHTML = ''; panel.classList.remove('wide'); S.userMsg = ''; S.uEdit = null; S.pwdMsg = ''; }
 function openMyPassword(){ S.open = {kind:'me'}; S.pwdMsg = ''; renderPanel(); const f = $('#my-pwd1'); if(f) f.focus(); }
 function renderMyPassword(){
@@ -1072,13 +1075,22 @@ function renderPanel(){
     }</div>${gro ? '' : `<div><button class="btn" type="button" data-act="addtask">+ Ajouter une tâche</button></div>`}</div>` : '';
   const lockNote = kind === 'p' && ro && !gro ? `<p class="muted lock">Seule la personne qui a créé ce projet${it.createdBy ? ` (${esc(personName(it.createdBy))})` : ''} ou un administrateur peut le modifier.</p>` : '';
   const summary = kind === 'p' ? `<div class="sect"><h3><label for="f-summary">Résumé</label></h3><textarea id="f-summary" data-field="summary" rows="3" placeholder="Une phrase sur l’événement">${esc(it.summary||'')}</textarea></div>` : '';
+  const dv = kind === 'p' ? driveInfo(it.driveUrl) : null;
+  const drive = kind !== 'p' ? '' : `<div class="sect drive"><h3><label for="f-drive">Dossier Google Drive</label></h3>
+    ${ro ? '' : `<input type="url" id="f-drive" value="${esc(it.driveUrl||'')}" placeholder="Colle ici le lien du dossier Drive du projet" autocomplete="off" spellcheck="false">`}
+    ${S.driveErr ? `<p class="shelp" role="alert" style="color:var(--danger)">${esc(S.driveErr)}</p>` : ''}
+    ${!dv ? (ro ? '<span class="muted">Aucun dossier Drive.</span>' : '<p class="muted shelp">Dans Google Drive : clic droit sur le dossier du projet → Partager → Copier le lien, puis colle-le ci-dessus. Son contenu s’affichera ici.</p>')
+      : `${dv.folder ? `<iframe class="drivefr" src="https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(dv.folder)}#list" title="Contenu du dossier Drive" loading="lazy" referrerpolicy="no-referrer"></iframe>` : ''}
+        <div class="pacts"><a class="btn" href="${esc(dv.url)}" target="_blank" rel="noopener noreferrer">${dv.folder ? 'Ouvrir le dossier dans Drive' : 'Ouvrir le fichier dans Drive'} ↗</a></div>
+        ${dv.folder ? '<p class="muted shelp">Pour ajouter des fichiers, ouvre le dossier dans Drive. Si la liste reste vide, vérifie que tu as accès au dossier avec ton compte Google, ou qu’il est partagé à « Tous les utilisateurs disposant du lien ».</p>' : ''}`}
+  </div>`;
   panel.innerHTML = `
     <div class="ph"><span class="kind">${kind === 'p' ? 'Projet' : 'Tâche'}</span>
       <button class="iconbtn" type="button" data-act="close" aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></div>
     <div class="pbody ${ro ? 'ro' : ''}">${it.archivedAt ? `<p class="archnote">${kind==='p' ? 'Projet archivé' : 'Tâche archivée'} le ${esc(new Date(it.archivedAt).toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'}))}. ${kind==='p' ? 'Il' : 'Elle'} n’apparaît que dans la vue « Archives ».</p>` : ''}${lockNote}
       <input class="ptitle" id="f-name" data-field="name" value="${esc(it.name||'')}" placeholder="${kind==='p'?'Nom du projet':'Nom de la tâche'}" aria-label="Nom" autocomplete="off">
       <div class="props">${props}</div>
-      ${summary}${linked}
+      ${summary}${drive}${linked}
       <div class="sect"><h3><label for="f-notes">Notes</label></h3><textarea id="f-notes" data-field="notes" placeholder="Contacts, références, détails pratiques…">${esc(it.notes||'')}</textarea></div>
       ${histSection(kind, it)}
       ${gro ? '' : (!ro && S.confirmDel
@@ -1151,10 +1163,21 @@ async function removeItem(kind, id){
   });
   for(const j of jobs) await patch(j[0], j[1], j[2]);
 }
+/* ---------- Google Drive ---------- */
+// N'accepte que des liens Google Drive / Docs ; renvoie l'identifiant du dossier s'il y en a un
+function driveInfo(raw){
+  if(!raw) return null;
+  let u; try { u = new URL(String(raw).trim()); } catch(e){ return null; }
+  if(u.protocol !== 'https:' || !['drive.google.com', 'docs.google.com'].includes(u.hostname)) return null;
+  const ok = s => s && /^[A-Za-z0-9_-]{10,}$/.test(s) ? s : null;
+  const m = u.pathname.match(/\/folders\/([^/?#]+)/);
+  const folder = ok(m && m[1]);
+  return {url: u.href, folder};
+}
 /* ---------- historique ---------- */
 const HFIELDS = {code:'Code projet', name:'Nom', status:'État d’avancement', owners:'Responsable', pilots:'Pilote de projet', creas:'Responsable créa',
   billing:'État facturation', start_date:'Début', end_date:'Fin', priority:'Priorité', client:'Client', summary:'Résumé', blocked_by:'Bloqué par',
-  notes:'Notes', created_by:'Créé par', due:'Date limite', done_on:'Fait le', tags:'Étiquettes', project:'Projet', parent:'Tâche parente'};
+  notes:'Notes', created_by:'Créé par', drive_url:'Dossier Drive', due:'Date limite', done_on:'Fait le', tags:'Étiquettes', project:'Projet', parent:'Tâche parente'};
 const H_PEOPLE = ['owners','pilots','creas'], H_DATES = ['start_date','end_date','due','done_on'];
 function histVal(k, v, kind){
   if(v == null || v === '' || (Array.isArray(v) && !v.length)) return '—';
@@ -1171,6 +1194,7 @@ function histChange(k, pair, kind){
   if(k === 'archived_at') return n ? '<strong>Archivé</strong>' : '<strong>Désarchivé</strong>';
   const lab = HFIELDS[k]; if(!lab) return '';
   if(k === 'notes' || k === 'summary') return `<strong>${lab}</strong> modifié${k === 'notes' ? 'es' : ''}`;
+  if(k === 'drive_url') return `<strong>${lab}</strong> ${n ? (o ? 'modifié' : 'ajouté') : 'retiré'}`;
   if(H_PEOPLE.includes(k) || k === 'tags'){
     const a = (n||[]).filter(x => !(o||[]).includes(x)), r = (o||[]).filter(x => !(n||[]).includes(x));
     const nm = x => k === 'tags' ? x : personName(x);
@@ -1762,6 +1786,11 @@ panel.addEventListener('change', async e => {
     const nx = panel.querySelector(`[data-addperson="${pf}"]`); if(nx) nx.focus();
     return;
   }
+  if(el.id === 'f-drive'){
+    const v = el.value.trim();
+    if(v && !driveInfo(v)){ S.driveErr = 'Ce lien n’est pas un lien Google Drive. Copie le lien depuis Drive (Partager → Copier le lien).'; renderPanel(); return; }
+    S.driveErr = ''; if((it.driveUrl || '') !== v) await patch(kind, id, {driveUrl: v || null}); renderPanel(); return;
+  }
   if(el.id === 'f-addblock'){ if(el.value){ await patch(kind, id, {blockedBy:[...(it.blockedBy||[]), el.value]}); renderPanel(); } return; }
   if(el.id === 'f-client'){
     const v = el.value.trim();
@@ -1853,7 +1882,7 @@ function subscribe(name, map, flag){
 }
 /* ---------- Supabase ---------- */
 const FMAP = {
-  projects: {start:'start_date', end:'end_date', blockedBy:'blocked_by', createdAt:'created_at', createdBy:'created_by', archivedAt:'archived_at'},
+  projects: {start:'start_date', end:'end_date', blockedBy:'blocked_by', createdAt:'created_at', createdBy:'created_by', archivedAt:'archived_at', driveUrl:'drive_url'},
   tasks: {doneOn:'done_on', blockedBy:'blocked_by', createdAt:'created_at', archivedAt:'archived_at'},
   people: {createdAt:'created_at'}
 };
@@ -1971,7 +2000,7 @@ function exportRows(kind){
     return ps.map(p => ({'Code projet':p.code || '', 'Nom du projet':p.name || '', 'Client':p.client || '', 'État d’avancement':p.status || '',
       'Créé par':p.createdBy ? personName(p.createdBy) : '', 'Responsable':names(p.owners), 'Pilote de projet':names(p.pilots), 'Responsable créa':names(p.creas),
       'Début':d(p.start), 'Fin':d(p.end), 'Priorité':p.priority || '', 'État facturation':p.billing || '',
-      'Tâches':allT().filter(t => t.project === p.id && !t.archivedAt).length, 'Résumé':p.summary || '', 'Notes':p.notes || '', 'Archivé le':ad(p.archivedAt)}));
+      'Tâches':allT().filter(t => t.project === p.id && !t.archivedAt).length, 'Résumé':p.summary || '', 'Notes':p.notes || '', 'Dossier Drive':p.driveUrl || '', 'Archivé le':ad(p.archivedAt)}));
   }
   const view = S.tView;
   let ts;
