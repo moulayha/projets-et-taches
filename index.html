@@ -264,6 +264,16 @@ body{margin:0}
 .stabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);padding:0 12px;scrollbar-width:thin}
 .shelp{margin:0;font-size:13px}
 .pacts{display:flex;flex-wrap:wrap;gap:8px}
+.hist summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
+.hist summary::-webkit-details-marker{display:none}
+.hist summary::before{content:"▸";color:var(--muted);font-size:12px;transition:transform .15s}
+.hist[open] summary::before{transform:rotate(90deg)}
+.hist summary h3{margin:0}
+.hlist{display:flex;flex-direction:column;gap:10px;margin-top:8px;font-size:13px}
+.hrow{display:flex;flex-direction:column;gap:3px;padding-left:2px}
+.hmeta{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.hmeta strong{color:var(--fg);font-weight:600}
+.hwhat{padding-left:28px;line-height:1.5}
 .archnote{margin:0;padding:8px 12px;border-radius:8px;background:var(--hover);color:var(--muted);font-size:13px}
 .archhelp{margin:0 0 10px}
 .slist{display:flex;flex-direction:column;gap:6px}
@@ -295,16 +305,28 @@ body{margin:0}
   .snav button[aria-current="page"]{box-shadow:inset 0 -2px 0 var(--accent), 0 1px 2px rgba(0,0,0,.06)}
 }
 .maintabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:4px;position:sticky;top:0;z-index:20;background:var(--bg);padding-top:6px}
-.maintabs button{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:10px 16px 12px;font-family:var(--display);font-weight:700;font-size:18px;color:var(--muted);cursor:pointer;border-radius:8px 8px 0 0;position:relative}
+.maintabs > button{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:10px 16px 12px;font-family:var(--display);font-weight:700;font-size:18px;color:var(--muted);cursor:pointer;border-radius:8px 8px 0 0;position:relative}
 #tabP{--tc:var(--p-blue-fg);--tb:var(--p-blue-bg);--ts:var(--s-blue)}
 #tabT{--tc:var(--p-orange-fg);--tb:var(--p-orange-bg);--ts:var(--s-orange)}
-.maintabs button{color:var(--tc);background:color-mix(in srgb, var(--tb) 45%, transparent)}
-.maintabs button svg{color:var(--ts)}
-.maintabs button:hover{color:var(--tc);background:color-mix(in srgb, var(--tb) 75%, transparent)}
-.maintabs button[aria-selected="true"]{color:var(--tc);background:var(--tb)}
-.maintabs button[aria-selected="true"]::after{content:"";position:absolute;left:10px;right:10px;bottom:-1px;height:3px;border-radius:3px;background:var(--ts)}
+.maintabs > button{color:var(--tc);background:color-mix(in srgb, var(--tb) 45%, transparent)}
+.maintabs > button svg{color:var(--ts)}
+.maintabs > button:hover{color:var(--tc);background:color-mix(in srgb, var(--tb) 75%, transparent)}
+.maintabs > button[aria-selected="true"]{color:var(--tc);background:var(--tb)}
+.maintabs > button[aria-selected="true"]::after{content:"";position:absolute;left:10px;right:10px;bottom:-1px;height:3px;border-radius:3px;background:var(--ts)}
 .maintabs .mc{font-family:var(--mono);font-size:12px;font-weight:400;color:var(--tc);background:var(--surface);border-radius:999px;padding:1px 8px}
 .maintabs .mc:empty{display:none}
+.gsearch{margin-left:auto;align-self:center;position:relative;width:min(300px,42vw);padding-bottom:4px}
+.gsearch input{width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);font:inherit;font-size:14px}
+.gresults{position:absolute;right:0;top:calc(100% + 2px);width:min(440px,92vw);max-height:60vh;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:6px;z-index:30}
+.gr{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:none;padding:7px 8px;border-radius:7px;cursor:pointer;color:var(--fg);font:inherit;font-size:14px}
+.gr:hover,.gr:focus-visible{background:var(--hover)}
+.grk{font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;flex:none}
+.grk.p{background:var(--p-blue-bg);color:var(--p-blue-fg)}
+.grk.t{background:var(--p-orange-bg);color:var(--p-orange-fg)}
+.grn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gra{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 6px;flex:none}
+.grnone,.grmore{margin:6px 8px;font-size:13px}
+@media (max-width:640px){ .maintabs{flex-wrap:wrap} .gsearch{width:100%;order:3;padding:6px 0} }
 section.db{margin-top:14px}
 section.db .db-head h2{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .pwdwrap{display:flex;gap:6px;align-items:stretch;max-width:420px}
@@ -361,11 +383,13 @@ section.db .db-head h2{position:absolute;width:1px;height:1px;overflow:hidden;cl
   <nav class="maintabs" id="maintabs" role="tablist" aria-label="Sections">
     <button type="button" role="tab" id="tabP" data-sec="p" aria-controls="secP"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.5h4.2l1.3 1.6H14v6.4H2z"/></svg>Projets<span class="mc" id="mcP"></span></button>
     <button type="button" role="tab" id="tabT" data-sec="t" aria-controls="secT"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.2 8.2l1.9 1.9 3.8-4"/></svg>Tâches<span class="mc" id="mcT"></span></button>
+    <div class="gsearch" role="search"><input type="search" id="gsearch" placeholder="Rechercher un projet, une tâche…" autocomplete="off" aria-label="Rechercher un projet ou une tâche" aria-controls="gresults"><div class="gresults" id="gresults" hidden></div></div>
   </nav>
   <section class="db" id="secP" role="tabpanel" aria-labelledby="hp">
     <div class="db-head">
       <h2 id="hp">Projets <span class="n" id="np"></span></h2>
       <div class="tabs" id="ptabs" role="tablist" aria-label="Vues des projets"></div>
+      <button class="btn" id="expP" type="button" title="Télécharge la vue affichée, avec ses filtres, dans un fichier Excel">Exporter Excel</button>
       <button class="btn primary" id="addP" type="button">Nouveau projet</button>
     </div>
     <div class="view" id="pview"></div>
@@ -375,6 +399,7 @@ section.db .db-head h2{position:absolute;width:1px;height:1px;overflow:hidden;cl
     <div class="db-head">
       <h2 id="ht">Tâches <span class="n" id="nt"></span></h2>
       <div class="tabs" id="ttabs" role="tablist" aria-label="Vues des tâches"></div>
+      <button class="btn" id="expT" type="button" title="Télécharge la vue affichée, avec ses filtres, dans un fichier Excel">Exporter Excel</button>
       <button class="btn primary" id="addT" type="button">Nouvelle tâche</button>
     </div>
     <div class="view" id="tview"></div>
@@ -397,7 +422,7 @@ let PSTAT = DEFAULT_PSTAT;
 const COLORS = [['gray','Gris'],['brown','Brun'],['orange','Orange'],['yellow','Jaune'],['green','Vert'],['blue','Bleu'],['purple','Violet'],['pink','Rose'],['red','Rouge']];
 const GROUPS = [['todo','Pas commencé'],['prog','Actif'],['done','Clos']];
 const ROLES = {owners:'Responsable', pilots:'Pilote de projet', creas:'Responsable créa'};
-const STABS = [['users','Utilisateurs'],['pstat','État d’avancement'],['owners','Responsable'],['pilots','Pilote de projet'],['creas','Responsable créa'],['clients','Client'],['tags','Étiquettes']];
+const STABS = [['users','Utilisateurs'],['pstat','État d’avancement'],['owners','Responsable'],['pilots','Pilote de projet'],['creas','Responsable créa'],['clients','Client'],['tags','Étiquettes'],['backup','Sauvegarde'],['digest','Email hebdomadaire']];
 const okColor = c => COLORS.some(x => x[0] === c) ? c : 'gray';
 function cleanPstat(x){
   if(!Array.isArray(x)) return null;
@@ -644,16 +669,20 @@ function projOwnerFilter(all, f){
       <optgroup label="Personnes">${ppl.map(p => `<option value="${esc(p.id)}"${f === p.id ? ' selected' : ''}>${esc(p.name)} (${p.n})</option>`).join('')}</optgroup>
     </select>`;
 }
-function viewProjects(){
-  if(S.pView === 'archives') return archiveView('p');
-  const all = projects();
-  if(!all.length) return emptyBox('Aucun projet pour l’instant', 'Crée le premier avec « Nouveau projet ».');
+function projFiltered(all){
   let f = S.fClient || '', o = S.fPOwner || '';
   if(f === '__none' ? !all.some(p => !p.client) : (f && !all.some(p => p.client === f))) f = '';
   const byClient = !f ? all : f === '__none' ? all.filter(p => !p.client) : all.filter(p => p.client === f);
   const oid = o === '__me' ? (S.me && S.me.pid) : o;
   if(o === '__none' ? !byClient.some(p => !p.createdBy) : (o && !byClient.some(p => p.createdBy === oid))) o = '';
   const ps = !o ? byClient : o === '__none' ? byClient.filter(p => !p.createdBy) : byClient.filter(p => p.createdBy === oid);
+  return {f, o, byClient, ps};
+}
+function viewProjects(){
+  if(S.pView === 'archives') return archiveView('p');
+  const all = projects();
+  if(!all.length) return emptyBox('Aucun projet pour l’instant', 'Crée le premier avec « Nouveau projet ».');
+  const {f, o, byClient, ps} = projFiltered(all);
   const bar = clientFilter(all, f).replace(/(<button type="button" class="btn" id="fClientClear">[^<]*<\/button>)?<\/div>$/, '')
     + projOwnerFilter(byClient, o)
     + (f || o ? `<button type="button" class="btn" id="fProjClear">Effacer les filtres</button>` : '') + `</div>`;
@@ -808,10 +837,7 @@ function ownerFilter(all, f, byOwner, st){
       <optgroup label="Personnes">${ppl.map(p => `<option value="${esc(p.id)}"${f === p.id && (!S.me || p.id !== S.me.pid || !me) ? ' selected' : ''}>${esc(p.name)} (${p.n})</option>`).join('')}</optgroup>
     </select>${stSel}${f || (showSt && st) ? `<button type="button" class="btn" id="fOwnerClear">Effacer ${f && showSt && st ? 'les filtres' : 'le filtre'}</button>` : ''}</div>`;
 }
-function viewTasks(){
-  if(S.tView === 'archives') return archiveView('t');
-  const all = tasks();
-  if(!all.length) return emptyBox('Aucune tâche pour l’instant', 'Crée une tâche avec « Nouvelle tâche », ou depuis la fiche d’un projet.');
+function taskFiltered(all){
   let f = S.fOwner || '';
   if(f && f !== '__none' && !all.some(t => (t.owners||[]).includes(f))) f = '';
   if(f === '__none' && !all.some(t => !(t.owners||[]).length)) f = '';
@@ -819,6 +845,13 @@ function viewTasks(){
   let st = S.fTStat || '';
   if(st === '__open' ? !byOwner.some(t => !isDoneT(t)) : (st && !byOwner.some(t => t.status === st))) st = '';
   const ts = S.tView === 'calendrier' || !st ? byOwner : st === '__open' ? byOwner.filter(t => !isDoneT(t)) : byOwner.filter(t => t.status === st);
+  return {f, byOwner, st, ts};
+}
+function viewTasks(){
+  if(S.tView === 'archives') return archiveView('t');
+  const all = tasks();
+  if(!all.length) return emptyBox('Aucune tâche pour l’instant', 'Crée une tâche avec « Nouvelle tâche », ou depuis la fiche d’un projet.');
+  const {f, byOwner, st, ts} = taskFiltered(all);
   return ownerFilter(all, f, byOwner, st) + (ts.length ? viewTasksOf(ts) : emptyBox('Aucune tâche', 'Aucune tâche ne correspond à ces filtres.'));
 }
 function viewTasksOf(ts){
@@ -1043,11 +1076,12 @@ function renderPanel(){
       <div class="props">${props}</div>
       ${summary}${linked}
       <div class="sect"><h3><label for="f-notes">Notes</label></h3><textarea id="f-notes" data-field="notes" placeholder="Contacts, références, détails pratiques…">${esc(it.notes||'')}</textarea></div>
-      ${ro ? '' : (S.confirmDel
+      ${histSection(kind, it)}
+      ${gro ? '' : (!ro && S.confirmDel
         ? `<div class="confirm"><span>Supprimer définitivement ${kind==='p' ? ((n => n ? `ce projet et ${n > 1 ? 'ses '+n+' tâches' : 'sa tâche'}` : 'ce projet')(allT().filter(t => t.project === id).length)) : 'cette tâche'} ? Cette action ne peut pas être annulée.</span><button class="btn" type="button" data-act="nodel">Annuler</button><button class="btn danger" type="button" data-act="yesdel">Supprimer</button></div>`
-        : `<div class="pacts">${it.archivedAt
+        : `<div class="pacts">${kind === 'p' ? `<button class="btn" type="button" data-act="dup" title="Crée une copie du projet et de ses tâches, sans dates ni avancement">Dupliquer le projet</button>` : ''}${ro ? '' : `${it.archivedAt
             ? `<button class="btn" type="button" data-act="unarch">Désarchiver ${kind==='p'?'le projet':'la tâche'}</button>`
-            : `<button class="btn" type="button" data-act="arch" title="${kind==='p' ? 'Retire le projet et ses tâches des vues, sans les supprimer' : 'Retire la tâche des vues, sans la supprimer'}">Archiver ${kind==='p'?'le projet':'la tâche'}</button>`}<button class="btn danger" type="button" data-act="del">Supprimer ${kind==='p'?'le projet':'la tâche'}</button></div>`)}
+            : `<button class="btn" type="button" data-act="arch" title="${kind==='p' ? 'Retire le projet et ses tâches des vues, sans les supprimer' : 'Retire la tâche des vues, sans la supprimer'}">Archiver ${kind==='p'?'le projet':'la tâche'}</button>`}<button class="btn danger" type="button" data-act="del">Supprimer ${kind==='p'?'le projet':'la tâche'}</button>`}</div>`)}
     </div>`;
   if(ro) panel.querySelectorAll('input,select,textarea').forEach(el => el.disabled = true);
   panel.hidden = false; scrim.hidden = false;
@@ -1079,7 +1113,9 @@ function patch(kind, id, data){
   map.set(id, {...cur, ...data});
   renderMain();
   const path = colName(kind) + '/' + id;
-  return enqueue(path, () => S.db.doc(path).update(data));
+  const p = enqueue(path, () => S.db.doc(path).update(data));
+  p.then(() => refreshHistSoon(id));
+  return p;
 }
 function create(kind, preset){
   if(!S.db || S.readOnly) return;
@@ -1110,6 +1146,82 @@ async function removeItem(kind, id){
     if(Object.keys(d).length) jobs.push(['t', t.id, d]);
   });
   for(const j of jobs) await patch(j[0], j[1], j[2]);
+}
+/* ---------- historique ---------- */
+const HFIELDS = {code:'Code projet', name:'Nom', status:'État d’avancement', owners:'Responsable', pilots:'Pilote de projet', creas:'Responsable créa',
+  billing:'État facturation', start_date:'Début', end_date:'Fin', priority:'Priorité', client:'Client', summary:'Résumé', blocked_by:'Bloqué par',
+  notes:'Notes', created_by:'Créé par', due:'Date limite', done_on:'Fait le', tags:'Étiquettes', project:'Projet', parent:'Tâche parente'};
+const H_PEOPLE = ['owners','pilots','creas'], H_DATES = ['start_date','end_date','due','done_on'];
+function histVal(k, v, kind){
+  if(v == null || v === '' || (Array.isArray(v) && !v.length)) return '—';
+  if(H_DATES.includes(k)){ const d = parseD(v); return d ? d.toLocaleDateString('fr-FR', {day:'numeric', month:'short', year:'numeric'}) : String(v); }
+  if(k === 'created_by') return personName(v);
+  if(k === 'project') return S.projects.has(v) ? (S.projects.get(v).name || 'Sans titre') : 'projet supprimé';
+  if(k === 'parent') return S.tasks.has(v) ? (S.tasks.get(v).name || 'Sans titre') : 'tâche supprimée';
+  if(k === 'blocked_by'){ const m = kind === 'p' ? S.projects : S.tasks; return v.map(b => m.has(b) ? (m.get(b).name || 'Sans titre') : '?').join(', '); }
+  if(Array.isArray(v)) return v.join(', ');
+  return String(v);
+}
+function histChange(k, pair, kind){
+  const [o, n] = pair || [];
+  if(k === 'archived_at') return n ? '<strong>Archivé</strong>' : '<strong>Désarchivé</strong>';
+  const lab = HFIELDS[k]; if(!lab) return '';
+  if(k === 'notes' || k === 'summary') return `<strong>${lab}</strong> modifié${k === 'notes' ? 'es' : ''}`;
+  if(H_PEOPLE.includes(k) || k === 'tags'){
+    const a = (n||[]).filter(x => !(o||[]).includes(x)), r = (o||[]).filter(x => !(n||[]).includes(x));
+    const nm = x => k === 'tags' ? x : personName(x);
+    return `<strong>${lab}</strong> : ${[a.length ? '+ ' + a.map(nm).join(', ') : '', r.length ? '− ' + r.map(nm).join(', ') : ''].filter(Boolean).map(esc).join(' · ')}`;
+  }
+  return `<strong>${lab}</strong> : ${esc(histVal(k, o, kind))} → ${esc(histVal(k, n, kind))}`;
+}
+function histInner(h, kind){
+  if(!h) return '<span class="muted">Chargement…</span>';
+  if(h.err) return '<span class="muted">Historique indisponible pour le moment.</span>';
+  if(!h.rows.length) return '<span class="muted">Aucune modification enregistrée pour l’instant.</span>';
+  return h.rows.map(r => {
+    const when = new Date(Number(r.at)), who = r.person_id ? personName(r.person_id) : 'Quelqu’un';
+    const what = r.action === 'create' ? (kind === 'p' ? 'a créé le projet' : 'a créé la tâche')
+      : Object.entries(r.changes || {}).map(([k, v]) => histChange(k, v, kind)).filter(Boolean).join('<br>');
+    if(!what) return '';
+    return `<div class="hrow"><div class="hmeta">${avatar(r.person_id || '?')}<span><strong>${esc(who)}</strong> · ${esc(when.toLocaleDateString('fr-FR', {day:'numeric', month:'short', year:'numeric'}))} à ${esc(when.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}))}</span></div><div class="hwhat">${what}</div></div>`;
+  }).join('');
+}
+function histSection(kind, it){
+  const h = S.hist && S.hist.id === it.id ? S.hist : null;
+  if(!h) setTimeout(() => loadHist(it.id), 0);
+  return `<details class="sect hist"${S.histOpen ? ' open' : ''}><summary><h3>Historique</h3></summary><div class="hlist">${histInner(h, kind)}</div></details>`;
+}
+async function loadHist(id){
+  if(!S.sb){ S.hist = {id, rows:[], err:true}; return; }
+  if(S.histLoading === id) return;
+  S.histLoading = id;
+  let r; try { r = await S.sb.from('activity').select('*').eq('item_id', id).order('at', {ascending:false}).limit(40); } catch(e){ r = {error:e}; }
+  S.histLoading = null;
+  S.hist = {id, rows: r.error ? [] : (r.data || []), err: !!r.error};
+  if(S.open && S.open.id === id){ const el = panel.querySelector('.hist .hlist'); if(el) el.innerHTML = histInner(S.hist, S.open.kind); }
+}
+function refreshHistSoon(id){ clearTimeout(S.histT); S.histT = setTimeout(() => { if(S.open && S.open.id === id) loadHist(id); }, 900); }
+async function duplicateProject(id){
+  if(!S.db || S.readOnly) return;
+  const src = S.projects.get(id); if(!src) return;
+  const pref = S.db.collection('projects').doc(), now = Date.now();
+  const pdata = {code:'', name:(src.name || 'Sans titre') + ' (copie)', status:(PSTAT.find(s => s.g === 'todo') || PSTAT[0]).n,
+    owners:[...(src.owners||[])], pilots:[...(src.pilots||[])], creas:[...(src.creas||[])], billing:null, start:null, end:null,
+    priority:src.priority || null, client:src.client || null, summary:src.summary || '', blockedBy:[], notes:src.notes || '',
+    createdAt:now, createdBy:S.me ? S.me.pid : null};
+  S.projects.set(pref.id, {id:pref.id, ...pdata});
+  // copies des tâches : remises « À faire », sans dates ; liens parent / blocage recâblés vers les copies
+  const srcT = allT().filter(t => t.project === id && !t.archivedAt).sort(byCreated);
+  const refs = new Map(srcT.map(t => [t.id, S.db.collection('tasks').doc()]));
+  const copies = srcT.map((t, i) => ({ref: refs.get(t.id), parent: t.parent && refs.has(t.parent) ? refs.get(t.parent).id : null, data: {
+    name:t.name || '', status:'À faire', owners:[...(t.owners||[])], due:null, doneOn:null, priority:t.priority || null, tags:[...(t.tags||[])],
+    project:pref.id, parent:null, blockedBy:(t.blockedBy||[]).filter(b => refs.has(b)).map(b => refs.get(b).id), notes:t.notes || '', createdAt:now + 1 + i}}));
+  copies.forEach(c => S.tasks.set(c.ref.id, {id:c.ref.id, ...c.data, parent:c.parent}));
+  renderMain(); openItem('p', pref.id);
+  setSync(`Projet dupliqué${copies.length ? ` avec ${plural(copies.length,'tâche')}` : ''}. Renseigne le code et les dates de la copie.`);
+  await enqueue('projects/' + pref.id, () => pref.set(pdata));
+  for(const c of copies) await enqueue('tasks/' + c.ref.id, () => c.ref.set(c.data));
+  for(const c of copies) if(c.parent) await enqueue('tasks/' + c.ref.id, () => S.db.doc('tasks/' + c.ref.id).update({parent:c.parent}));
 }
 async function archiveItem(kind, id, on){
   if(!S.db || S.readOnly) return;
@@ -1239,6 +1351,11 @@ function renderSettings(){
         <span class="suse">${plural(n,'tâche')}</span>
         <span class="sact"><button class="iconbtn" type="button" data-sact="tgup" data-i="${i}"${i===0?' disabled':''} aria-label="Monter">↑</button><button class="iconbtn" type="button" data-sact="tgdown" data-i="${i}"${i===TAGS.length-1?' disabled':''} aria-label="Descendre">↓</button><button class="iconbtn" type="button" data-sact="tgdel" data-i="${i}" title="Supprimer" aria-label="Supprimer ${esc(tg.n)}">×</button></span>${conf}</div>`; }).join('') || '<p class="muted shelp">Aucune étiquette pour l’instant.</p>'}</div>
     <div class="sadd"><input type="text" id="s-new" placeholder="Nouvelle étiquette" aria-label="Nom de la nouvelle étiquette"><button class="btn" type="button" data-sact="addtg">Ajouter</button></div>`;
+  } else if(tab === 'backup'){
+    body = `<p class="muted shelp">Télécharge un fichier contenant <strong>toutes les données</strong> de l’application : projets (archivés compris), tâches, personnes, comptes (email et rôle), paramètres et historique des modifications. Garde ce fichier en lieu sûr : il contient des données réelles.</p>
+    <p class="muted shelp">Les mots de passe ne sont jamais inclus.</p>
+    ${S.bkMsg ? `<p class="shelp" role="status" style="color:${S.bkOk ? 'var(--accent)' : 'var(--danger)'}">${esc(S.bkMsg)}</p>` : ''}
+    <div class="sadd"><button class="btn primary" type="button" data-sact="backup"${S.bkBusy ? ' disabled' : ''}>${S.bkBusy ? 'Préparation…' : 'Télécharger une sauvegarde'}</button></div>`;
   } else if(ROLES[tab]){
     const f = tab, all = [...S.people.values()].sort(byName);
     const list = all.filter(p => inRole(p, f)), others = all.filter(p => !inRole(p, f));
@@ -1273,6 +1390,7 @@ function renderSettings(){
         <div class="sg">Projets</div>${navBtn('pstat')}${navBtn('clients')}
         <div class="sg">Tâches</div>${navBtn('tags')}
         <div class="sg">Équipe</div>${navBtn('owners')}${navBtn('pilots')}${navBtn('creas')}
+        <div class="sg">Données</div>${navBtn('backup')}
       </nav>
       <div class="pbody"><h2 class="stitle">${esc(label)}</h2>${body}</div>
     </div>`;
@@ -1287,13 +1405,37 @@ const SICONS = {
   owners: svgI('<circle cx="8" cy="5" r="2.6"/><path d="M3 13.5c.7-2.7 2.6-4 5-4s4.3 1.3 5 4"/>'),
   pilots: svgI('<path d="M3 14V2.5M3 2.8h8.5l-1.8 2.6 1.8 2.6H3"/>'),
   creas: svgI('<path d="M10.6 2.4l3 3-7.9 7.9H2.7v-3z"/><path d="M9.2 3.8l3 3"/>'),
-  tags: svgI('<path d="M2 2.5h5.3l6.5 6.5-4.8 4.8L2.5 7.3z"/><circle cx="5" cy="5.3" r="1"/>')
+  tags: svgI('<path d="M2 2.5h5.3l6.5 6.5-4.8 4.8L2.5 7.3z"/><circle cx="5" cy="5.3" r="1"/>'),
+  backup: svgI('<path d="M8 2.5v7.5M5 7l3 3 3-3"/><path d="M2.5 10.5v2.5h11v-2.5"/>')
 };
+const BACKUP_TABLES = ['projects','tasks','people','app_users','settings','activity'];
+async function downloadBackup(){
+  if(!S.sb) return;
+  S.bkBusy = true; S.bkMsg = ''; renderPanel();
+  try {
+    const tables = {};
+    for(const t of BACKUP_TABLES){
+      const r = await S.sb.from(t).select('*');
+      if(r.error){ if(t === 'activity') continue; throw r.error; }
+      tables[t] = r.data || [];
+    }
+    const now = new Date(), day = iso(now);
+    const json = JSON.stringify({app:'WEEKLY STATUS · Projets et tâches', exportedAt: now.toISOString(), tables}, null, 2);
+    saveFile(new Blob([json], {type:'application/json'}), `sauvegarde-weekly-status-${day}.json`);
+    S.bkOk = true; S.bkMsg = `Sauvegarde téléchargée : ${plural(tables.projects.length,'projet')}, ${plural(tables.tasks.length,'tâche')}, ${plural(tables.people.length,'personne')}.`;
+  } catch(e){ S.bkOk = false; S.bkMsg = 'La sauvegarde n’a pas pu être préparée. Vérifie ta connexion puis recommence.'; }
+  S.bkBusy = false; if(S.open && S.open.kind === 's') renderPanel();
+}
+function saveFile(blob, name){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
 function settingsCount(k){
   if(k === 'users') return S.users.size || '';
   if(k === 'pstat') return PSTAT.length;
   if(k === 'clients') return clientList().length;
   if(k === 'tags') return TAGS.length;
+  if(k === 'backup') return '';
   if(ROLES[k]) return [...S.people.values()].filter(p => inRole(p, k)).length;
   return '';
 }
@@ -1384,6 +1526,7 @@ function settingsClick(e){
   else if(a === 'tgup' || a === 'tgdown'){ const l = TAGS.slice(), j = a === 'tgup' ? i-1 : i+1; if(j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; saveTags(l); }
   else if(a === 'tgdel'){ const tg = TAGS[i]; S.tgDel = tg ? tg.n : null; }
   else if(a === 'tgcancel'){ S.tgDel = null; }
+  else if(a === 'backup'){ downloadBackup(); return; }
   else if(a === 'tgdelok'){ const tg = TAGS[i]; S.tgDel = null; if(!tg) return renderPanel();
     tagUse(tg.n).forEach(t => patch('t', t.id, {tags: t.tags.filter(x => x !== tg.n)}));
     saveTags(TAGS.filter((_,k) => k !== i)); }
@@ -1511,6 +1654,7 @@ panel.addEventListener('click', async e => {
     else if(a === 'del'){ S.confirmDel = true; renderPanel(); }
     else if(a === 'nodel'){ S.confirmDel = false; renderPanel(); }
     else if(a === 'yesdel') removeItem(kind, id);
+    else if(a === 'dup') duplicateProject(id);
     else if(a === 'arch') archiveItem(kind, id, true);
     else if(a === 'unarch') archiveItem(kind, id, false);
     else if(a === 'addtask') create('t', {project:id});
@@ -1587,6 +1731,7 @@ panel.addEventListener('change', async e => {
   await patch(kind, id, data);
   if(f !== 'name' && f !== 'summary' && f !== 'notes' && f !== 'code') renderPanel();
 });
+panel.addEventListener('toggle', e => { if(e.target.matches && e.target.matches('.hist')) S.histOpen = e.target.open; }, true);
 panel.addEventListener('keydown', e => {
   if(S.open && S.open.kind === 's' && e.key === 'Enter' && e.target.matches('input[type=text]')){
     e.preventDefault();
@@ -1750,7 +1895,94 @@ $('#maintabs').addEventListener('click', e => {
   const b = e.target.closest('[data-sec]'); if(!b) return;
   S.sec = b.dataset.sec; LS.set('pt.sec', S.sec); renderSection(); window.scrollTo({top:0});
 });
+/* ---------- export Excel ---------- */
+let xlsxP = null;
+const loadXlsx = () => xlsxP || (xlsxP = new Promise((res, rej) => {
+  const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+  s.onload = () => window.XLSX ? res(window.XLSX) : rej(new Error('xlsx')); s.onerror = () => { xlsxP = null; rej(new Error('xlsx')); };
+  document.head.appendChild(s);
+}));
+function exportRows(kind){
+  const names = ids => (ids||[]).map(personName).join(', ');
+  // dates écrites en numéros de série Excel (pas de décalage de fuseau horaire)
+  const serial = x => x ? (Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()) - Date.UTC(1899, 11, 30)) / 864e5 : null;
+  const d = v => serial(parseD(v)), ad = ts => ts ? serial(new Date(ts)) : null;
+  if(kind === 'p'){
+    const view = S.pView;
+    let ps;
+    if(view === 'archives') ps = allP().filter(p => p.archivedAt && (!S.mine || mineP(p))).sort((a,b) => b.archivedAt - a.archivedAt);
+    else { const all = projects(); ps = sortRows(projFiltered(all).ps, S.pSort); if(view === 'actifs') ps = ps.filter(p => (find(PSTAT, p.status)||{}).g === 'prog'); }
+    return ps.map(p => ({'Code projet':p.code || '', 'Nom du projet':p.name || '', 'Client':p.client || '', 'État d’avancement':p.status || '',
+      'Créé par':p.createdBy ? personName(p.createdBy) : '', 'Responsable':names(p.owners), 'Pilote de projet':names(p.pilots), 'Responsable créa':names(p.creas),
+      'Début':d(p.start), 'Fin':d(p.end), 'Priorité':p.priority || '', 'État facturation':p.billing || '',
+      'Tâches':allT().filter(t => t.project === p.id && !t.archivedAt).length, 'Résumé':p.summary || '', 'Notes':p.notes || '', 'Archivé le':ad(p.archivedAt)}));
+  }
+  const view = S.tView;
+  let ts;
+  if(view === 'archives') ts = allT().filter(t => t.archivedAt && (!S.mine || mineT(t))).sort((a,b) => b.archivedAt - a.archivedAt);
+  else { ts = sortRows(taskFiltered(tasks()).ts, S.tSort, 't'); if(['parprojet','retard','charge'].includes(view)) ts = ts.filter(t => !isDoneT(t)); }
+  return ts.map(t => ({'Nom de la tâche':t.name || '', 'Projet':t.project && S.projects.has(t.project) ? (S.projects.get(t.project).name || '') : '',
+    'État d’avancement':t.status || '', 'Responsable':names(t.owners), 'Date limite':d(t.due), 'Fait le':d(t.doneOn), 'Priorité':t.priority || '',
+    'Étiquettes':(t.tags||[]).join(', '), 'Tâche parente':t.parent && S.tasks.has(t.parent) ? (S.tasks.get(t.parent).name || '') : '', 'Notes':t.notes || '', 'Archivée le':ad(t.archivedAt)}));
+}
+async function exportExcel(kind){
+  const btn = $(kind === 'p' ? '#expP' : '#expT'), label = btn.textContent;
+  const rows = exportRows(kind);
+  if(!rows.length){ setSync('Rien à exporter : aucune ligne ne correspond à cette vue et à ces filtres.', true); return; }
+  btn.disabled = true; btn.textContent = 'Export…';
+  try {
+    const X = await loadXlsx();
+    const ws = X.utils.json_to_sheet(rows);
+    const keys = Object.keys(rows[0]), DATES = ['Début','Fin','Date limite','Fait le','Archivé le','Archivée le'];
+    keys.forEach((k, c) => { if(!DATES.includes(k)) return;
+      for(let r = 1; r <= rows.length; r++){ const cell = ws[X.utils.encode_cell({r, c})]; if(cell && cell.t === 'n') cell.z = 'dd/mm/yyyy'; } });
+    ws['!cols'] = keys.map(k => ({wch: Math.min(50, Math.max(k.length, ...rows.map(r => DATES.includes(k) ? 10 : String(r[k] ?? '').length)) + 2)}));
+    ws['!autofilter'] = {ref: ws['!ref']};
+    const views = kind === 'p' ? PVIEWS : TVIEWS, v = kind === 'p' ? S.pView : S.tView;
+    const vlabel = ((views.find(x => x[0] === v) || [, kind === 'p' ? 'Projets' : 'Tâches'])[1]);
+    const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, vlabel.replace(/[\\\/\?\*\[\]:]/g, ' ').slice(0, 31));
+    const slug = norm(vlabel).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    X.writeFile(wb, `${kind === 'p' ? 'projets' : 'taches'}-${slug}-${iso(new Date())}.xlsx`);
+    setSync(`Export Excel téléchargé : ${plural(rows.length, kind === 'p' ? 'projet' : 'tâche')}.`);
+  } catch(e){ setSync('L’export Excel n’a pas pu être préparé. Vérifie ta connexion puis recommence.', true); }
+  btn.disabled = false; btn.textContent = label;
+}
+$('#expP').addEventListener('click', () => exportExcel('p'));
+$('#expT').addEventListener('click', () => exportExcel('t'));
+/* ---------- recherche ---------- */
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+function renderSearch(){
+  const box = $('#gresults'), q = norm($('#gsearch').value.trim());
+  if(!q){ box.hidden = true; box.innerHTML = ''; return; }
+  const words = q.split(/\s+/), hit = hay => { const h = norm(hay); return words.every(w => h.includes(w)); };
+  const pname = t => t.project && S.projects.has(t.project) ? (S.projects.get(t.project).name || '') : '';
+  const order = (a, b) => (!!a.archivedAt - !!b.archivedAt) || byCreated(b, a);
+  const ps = allP().filter(p => hit([p.code, p.name, p.client, p.summary, p.notes].join(' '))).sort(order);
+  const ts = allT().filter(t => hit([t.name, t.notes, (t.tags||[]).join(' '), pname(t)].join(' '))).sort(order);
+  const item = (k, x, sub) => `<button type="button" class="gr" data-open="${k}:${esc(x.id)}"><span class="grk ${k}">${k === 'p' ? 'Projet' : 'Tâche'}</span><span class="grn">${x.name ? esc(x.name) : '<em class="muted">Sans titre</em>'}${sub ? `<span class="muted"> · ${esc(sub)}</span>` : ''}</span>${x.archivedAt ? '<span class="gra">Archivé</span>' : ''}</button>`;
+  const MP = 8, MT = 12, more = Math.max(0, ps.length - MP) + Math.max(0, ts.length - MT);
+  box.innerHTML = ps.length + ts.length
+    ? ps.slice(0, MP).map(p => item('p', p, [p.code, p.client].filter(Boolean).join(' · '))).join('') + ts.slice(0, MT).map(t => item('t', t, pname(t))).join('')
+      + (more ? `<p class="muted grmore">Et ${more} autre${more > 1 ? 's' : ''} : précise ta recherche.</p>` : '')
+    : '<p class="muted grnone">Aucun projet ni aucune tâche ne correspond.</p>';
+  box.hidden = false;
+}
+$('#gsearch').addEventListener('input', renderSearch);
+$('#gsearch').addEventListener('focus', renderSearch);
+$('#gsearch').addEventListener('keydown', e => {
+  if(e.key === 'Escape'){ e.stopPropagation(); e.target.value = ''; renderSearch(); }
+  if(e.key === 'ArrowDown'){ const f = $('#gresults .gr'); if(f){ e.preventDefault(); f.focus(); } }
+});
+$('#gresults').addEventListener('keydown', e => {
+  const items = [...document.querySelectorAll('#gresults .gr')], i = items.indexOf(document.activeElement);
+  if(e.key === 'ArrowDown' && i < items.length - 1){ e.preventDefault(); items[i + 1].focus(); }
+  if(e.key === 'ArrowUp'){ e.preventDefault(); (i > 0 ? items[i - 1] : $('#gsearch')).focus(); }
+  if(e.key === 'Escape'){ e.stopPropagation(); $('#gresults').hidden = true; $('#gsearch').focus(); }
+});
+$('#gresults').addEventListener('click', e => { if(e.target.closest('.gr')) $('#gresults').hidden = true; });
+document.addEventListener('click', e => { if(!e.target.closest('.gsearch')) $('#gresults').hidden = true; });
 $('#maintabs').addEventListener('keydown', e => {
+  if(e.target.closest('.gsearch')) return;
   if(e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
   S.sec = S.sec === 't' ? 'p' : 't'; LS.set('pt.sec', S.sec); renderSection(); $(S.sec === 't' ? '#tabT' : '#tabP').focus();
 });
