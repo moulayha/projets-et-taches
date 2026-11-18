@@ -276,6 +276,10 @@ body{margin:0}
 .hwhat{padding-left:28px;line-height:1.5}
 .archnote{margin:0;padding:8px 12px;border-radius:8px;background:var(--hover);color:var(--muted);font-size:13px}
 .archhelp{margin:0 0 10px}
+.dgon{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+.dgwhen label{font-size:13px;color:var(--muted)}
+.dgrow{cursor:pointer}
+.dgrow .dgname{flex:1;min-width:0}
 .slist{display:flex;flex-direction:column;gap:6px}
 .srow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:6px 8px}
 .srow input[type=text]{flex:1 1 140px;min-width:0;border:1px solid transparent;background:none;border-radius:6px;padding:4px 6px;font-weight:500}
@@ -1351,6 +1355,24 @@ function renderSettings(){
         <span class="suse">${plural(n,'tâche')}</span>
         <span class="sact"><button class="iconbtn" type="button" data-sact="tgup" data-i="${i}"${i===0?' disabled':''} aria-label="Monter">↑</button><button class="iconbtn" type="button" data-sact="tgdown" data-i="${i}"${i===TAGS.length-1?' disabled':''} aria-label="Descendre">↓</button><button class="iconbtn" type="button" data-sact="tgdel" data-i="${i}" title="Supprimer" aria-label="Supprimer ${esc(tg.n)}">×</button></span>${conf}</div>`; }).join('') || '<p class="muted shelp">Aucune étiquette pour l’instant.</p>'}</div>
     <div class="sadd"><input type="text" id="s-new" placeholder="Nouvelle étiquette" aria-label="Nom de la nouvelle étiquette"><button class="btn" type="button" data-sact="addtg">Ajouter</button></div>`;
+  } else if(tab === 'digest'){
+    const cfg = digestCfg(), accts = [...S.people.values()].filter(p => S.users.get(p.id)).sort(byName);
+    if(S.dgState === undefined) loadDigestState();
+    const st = S.dgState, nSel = cfg.recipients.filter(id => S.users.get(id)).length;
+    const DAYS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+    const meMail = S.me && S.users.get(S.me.pid) ? S.users.get(S.me.pid).email : '';
+    body = `<p class="muted shelp">Chaque semaine, au jour et à l’heure choisis (<strong>heure du Maroc</strong>), chaque destinataire reçoit par email <strong>ses tâches en retard, ses tâches de la semaine et ses projets</strong> qui commencent ou se terminent dans la semaine. Une personne qui n’a rien de prévu ne reçoit pas d’email.</p>
+    <label class="dgon"><input type="checkbox" data-dg="enabled"${cfg.enabled ? ' checked' : ''}> <strong>Envoi automatique activé</strong></label>
+    <div class="sadd dgwhen"><label for="dg-day">Jour</label><select id="dg-day" data-dg="day">${DAYS.map((d, i) => `<option value="${i + 1}"${cfg.day === i + 1 ? ' selected' : ''}>${d}</option>`).join('')}</select>
+      <label for="dg-hour">Heure</label><select id="dg-hour" data-dg="hour">${Array.from({length:24}, (_, h) => `<option value="${h}"${cfg.hour === h ? ' selected' : ''}>${String(h).padStart(2, '0')} h 00</option>`).join('')}</select></div>
+    <p class="muted shelp">${cfg.enabled ? `Prochain envoi : <strong>${DAYS[cfg.day - 1].toLowerCase()} à ${String(cfg.hour).padStart(2, '0')} h</strong>, à ${plural(nSel, 'destinataire')}.` : 'L’envoi automatique est désactivé : personne ne reçoit d’email.'}${st && st.lastAt ? ` Dernier envoi automatique : ${esc(new Date(st.lastAt).toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'}))}, ${plural(st.lastCount || 0, 'email')}.` : ''}</p>
+    <h3 class="sh">Destinataires <span class="suse">${nSel} / ${accts.length}</span></h3>
+    <div class="sadd"><button class="btn" type="button" data-sact="dgall">Tout cocher</button><button class="btn" type="button" data-sact="dgnone">Tout décocher</button></div>
+    <div class="slist">${accts.map(p => `<label class="srow dgrow"><input type="checkbox" data-dg="r" value="${esc(p.id)}"${cfg.recipients.includes(p.id) ? ' checked' : ''}>${avatar(p.id)}<span class="dgname">${esc(p.name || 'Sans nom')}</span><span class="suse">${esc(S.users.get(p.id).email || '')}</span></label>`).join('') || '<p class="muted shelp">Aucun compte pour l’instant.</p>'}</div>
+    <h3 class="sh">Test</h3>
+    <p class="muted shelp">Envoie tout de suite ton propre récapitulatif${meMail ? ` à <strong>${esc(meMail)}</strong>` : ''}, même si tu n’as rien de prévu. Expéditeur : weekly-status@ownload.net.</p>
+    ${S.dgMsg ? `<p class="shelp" role="status" style="color:${S.dgOk ? 'var(--accent)' : 'var(--danger)'}">${esc(S.dgMsg)}</p>` : ''}
+    <div class="sadd"><button class="btn primary" type="button" data-sact="dgtest"${S.dgBusy ? ' disabled' : ''}>${S.dgBusy ? 'Envoi…' : 'M’envoyer un test maintenant'}</button></div>`;
   } else if(tab === 'backup'){
     body = `<p class="muted shelp">Télécharge un fichier contenant <strong>toutes les données</strong> de l’application : projets (archivés compris), tâches, personnes, comptes (email et rôle), paramètres et historique des modifications. Garde ce fichier en lieu sûr : il contient des données réelles.</p>
     <p class="muted shelp">Les mots de passe ne sont jamais inclus.</p>
@@ -1390,7 +1412,7 @@ function renderSettings(){
         <div class="sg">Projets</div>${navBtn('pstat')}${navBtn('clients')}
         <div class="sg">Tâches</div>${navBtn('tags')}
         <div class="sg">Équipe</div>${navBtn('owners')}${navBtn('pilots')}${navBtn('creas')}
-        <div class="sg">Données</div>${navBtn('backup')}
+        <div class="sg">Données</div>${navBtn('digest')}${navBtn('backup')}
       </nav>
       <div class="pbody"><h2 class="stitle">${esc(label)}</h2>${body}</div>
     </div>`;
@@ -1406,8 +1428,34 @@ const SICONS = {
   pilots: svgI('<path d="M3 14V2.5M3 2.8h8.5l-1.8 2.6 1.8 2.6H3"/>'),
   creas: svgI('<path d="M10.6 2.4l3 3-7.9 7.9H2.7v-3z"/><path d="M9.2 3.8l3 3"/>'),
   tags: svgI('<path d="M2 2.5h5.3l6.5 6.5-4.8 4.8L2.5 7.3z"/><circle cx="5" cy="5.3" r="1"/>'),
-  backup: svgI('<path d="M8 2.5v7.5M5 7l3 3 3-3"/><path d="M2.5 10.5v2.5h11v-2.5"/>')
+  backup: svgI('<path d="M8 2.5v7.5M5 7l3 3 3-3"/><path d="M2.5 10.5v2.5h11v-2.5"/>'),
+  digest: svgI('<rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2.5 4.5L8 8.8l5.5-4.3"/>')
 };
+const digestCfg = () => { const d = S.meta.digest || {};
+  return {enabled: !!d.enabled, day: Number(d.day) >= 1 && Number(d.day) <= 7 ? Number(d.day) : 1, hour: Number(d.hour) >= 0 && Number(d.hour) <= 23 ? Number(d.hour) : 8,
+    recipients: Array.isArray(d.recipients) ? d.recipients.filter(x => typeof x === 'string') : []}; };
+function saveDigest(part){ saveMeta({digest: {...digestCfg(), ...part}}); renderPanel(); }
+async function loadDigestState(){
+  S.dgState = null;
+  try { const r = await S.sb.from('settings').select('data').eq('id', 'digest_state').maybeSingle(); S.dgState = r.data ? r.data.data : null; } catch(e){}
+  if(S.open && S.open.kind === 's' && S.sTab === 'digest') renderPanel();
+}
+async function sendDigestTest(){
+  if(!S.sb) return;
+  S.dgBusy = true; S.dgMsg = ''; renderPanel();
+  const rerender = () => { if(S.open && S.open.kind === 's') renderPanel(); };
+  try {
+    const r = await S.sb.rpc('send_digest_test');
+    if(r.error || !r.data || !r.data.ok) throw new Error(r.error ? r.error.message : 'échec');
+    let res = {pending:true};
+    for(let i = 0; i < 10 && res.pending; i++){ await new Promise(x => setTimeout(x, 1500)); const c = await S.sb.rpc('digest_check', {rid: r.data.request_id}); if(!c.error) res = c.data; }
+    const mail = S.me && S.users.get(S.me.pid) ? S.users.get(S.me.pid).email : 'ton adresse';
+    if(res.pending){ S.dgOk = true; S.dgMsg = `Envoi demandé à ${mail}. Il peut mettre une minute à arriver.`; }
+    else if(res.status >= 200 && res.status < 300){ S.dgOk = true; S.dgMsg = `Email de test envoyé à ${mail}. Regarde aussi dans les courriers indésirables.`; }
+    else throw new Error('resend ' + res.status);
+  } catch(e){ S.dgOk = false; S.dgMsg = 'L’email de test n’a pas pu être envoyé. Réessaie dans un instant ; si ça recommence, préviens-moi.'; }
+  S.dgBusy = false; rerender();
+}
 const BACKUP_TABLES = ['projects','tasks','people','app_users','settings','activity'];
 async function downloadBackup(){
   if(!S.sb) return;
@@ -1436,6 +1484,7 @@ function settingsCount(k){
   if(k === 'clients') return clientList().length;
   if(k === 'tags') return TAGS.length;
   if(k === 'backup') return '';
+  if(k === 'digest'){ const c = digestCfg(); return c.enabled ? c.recipients.filter(id => S.users.get(id)).length : ''; }
   if(ROLES[k]) return [...S.people.values()].filter(p => inRole(p, k)).length;
   return '';
 }
@@ -1527,6 +1576,8 @@ function settingsClick(e){
   else if(a === 'tgdel'){ const tg = TAGS[i]; S.tgDel = tg ? tg.n : null; }
   else if(a === 'tgcancel'){ S.tgDel = null; }
   else if(a === 'backup'){ downloadBackup(); return; }
+  else if(a === 'dgtest'){ sendDigestTest(); return; }
+  else if(a === 'dgall' || a === 'dgnone'){ saveDigest({recipients: a === 'dgall' ? [...S.users.keys()] : []}); return; }
   else if(a === 'tgdelok'){ const tg = TAGS[i]; S.tgDel = null; if(!tg) return renderPanel();
     tagUse(tg.n).forEach(t => patch('t', t.id, {tags: t.tags.filter(x => x !== tg.n)}));
     saveTags(TAGS.filter((_,k) => k !== i)); }
@@ -1567,6 +1618,11 @@ function settingsChange(e){
     tagUse(old).forEach(t => patch('t', t.id, {tags: t.tags.map(x => x === old ? v : x)}));
     renderPanel(); return;
   }
+  if(el.dataset.dg){ const k = el.dataset.dg, c = digestCfg();
+    if(k === 'enabled') saveDigest({enabled: el.checked});
+    else if(k === 'day' || k === 'hour') saveDigest({[k]: Number(el.value)});
+    else if(k === 'r'){ const set = new Set(c.recipients); el.checked ? set.add(el.value) : set.delete(el.value); saveDigest({recipients: [...set]}); }
+    return; }
   if(el.dataset.pc){ const p = S.people.get(el.dataset.pc), v = okColor(el.value); if(p && v !== p.color) patchPerson(p.id, {color:v}); renderPanel(); return; }
   if(el.dataset.pn){ const v = el.value.trim(); const p = S.people.get(el.dataset.pn); if(p && v && v !== p.name) patchPerson(p.id, {name:v}); else renderPanel(); return; }
   if(el.dataset.cf){
