@@ -290,6 +290,7 @@ body{margin:0}
 .srow select,.sadd select,.sadd input{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:4px 6px;max-width:100%}
 .sadd{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .sadd input{flex:1 1 160px;min-width:0}
+.sadd.top{padding:10px 0 12px;border-bottom:1px solid var(--line);margin-bottom:4px}
 .sw{width:12px;height:12px;border-radius:4px;flex:none}
 .srow[hidden]{display:none}
 .panel.wide{width:min(900px,100%)}
@@ -1440,6 +1441,10 @@ function renderSettings(){
       </nav>
       <div class="pbody"><h2 class="stitle">${esc(label)}</h2>${body}</div>
     </div>`;
+  // la ligne « Ajouter » passe en haut de la liste, juste sous les explications
+  const addRow = panel.querySelector('.pbody #s-new') && panel.querySelector('.pbody #s-new').closest('.sadd');
+  const firstBlock = panel.querySelector('.pbody .sfilter, .pbody h3.sh, .pbody .slist');
+  if(addRow && firstBlock){ addRow.classList.add('top'); firstBlock.before(addRow); }
   if(ro) panel.querySelectorAll('.pbody input,.pbody select,.pbody button').forEach(el => el.disabled = true);
   panel.hidden = false; scrim.hidden = false;
 }
