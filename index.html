@@ -1103,6 +1103,9 @@ function renderPanel(){
       ${summary}${drive}${linked}
       <div class="sect"><h3><label for="f-notes">Notes</label></h3><textarea id="f-notes" data-field="notes" placeholder="Contacts, références, détails pratiques…">${esc(it.notes||'')}</textarea></div>
       ${histSection(kind, it)}
+      ${kind === 'p' && S.db && isBilling() ? `<div class="pacts">${it.archivedAt
+          ? `<button class="btn" type="button" data-act="unarch">Désarchiver le projet</button>`
+          : `<button class="btn" type="button" data-act="arch" title="Retire le projet et ses tâches des vues, sans les supprimer">Archiver le projet</button>`}</div>` : ''}
       ${gro ? '' : (!ro && S.confirmDel
         ? `<div class="confirm"><span>Supprimer définitivement ${kind==='p' ? ((n => n ? `ce projet et ${n > 1 ? 'ses '+n+' tâches' : 'sa tâche'}` : 'ce projet')(allT().filter(t => t.project === id).length)) : 'cette tâche'} ? Cette action ne peut pas être annulée.</span><button class="btn" type="button" data-act="nodel">Annuler</button><button class="btn danger" type="button" data-act="yesdel">Supprimer</button></div>`
         : `<div class="pacts">${kind === 'p' ? `<button class="btn" type="button" data-act="dup" title="Crée une copie du projet et de ses tâches, sans dates ni avancement">Dupliquer le projet</button>` : ''}${ro ? '' : `${it.archivedAt
@@ -1263,7 +1266,22 @@ async function duplicateProject(id){
   for(const c of copies) await enqueue('tasks/' + c.ref.id, () => c.ref.set(c.data));
   for(const c of copies) if(c.parent) await enqueue('tasks/' + c.ref.id, () => S.db.doc('tasks/' + c.ref.id).update({parent:c.parent}));
 }
+// Facturation : archivage d'un projet (et de ses tâches) via une fonction serveur dédiée
+async function archiveProjectBilling(id, on){
+  const it = S.projects.get(id); if(!it) return;
+  closePanel();
+  const r = await S.sb.rpc('set_project_archived', {pid: id, archive: on});
+  if(r.error){ onWriteError(r.error); return; }
+  const n = (r.data && r.data.tasks) || 0, ts = r.data && r.data.archived_at ? Number(r.data.archived_at) : Date.now();
+  S.projects.set(id, {...it, archivedAt: on ? ts : null});
+  allT().forEach(t => { if(t.project !== id) return;
+    if(on && !t.archivedAt) S.tasks.set(t.id, {...t, archivedAt: ts});
+    if(!on && t.archivedAt && t.archivedAt === it.archivedAt) S.tasks.set(t.id, {...t, archivedAt: null}); });
+  renderMain();
+  setSync(on ? `Projet archivé${n ? ` avec ${plural(n,'tâche')}` : ''}. Il reste consultable dans la vue « Archives ».` : `Projet désarchivé${n ? ` avec ${plural(n,'tâche')}` : ''}.`);
+}
 async function archiveItem(kind, id, on){
+  if(kind === 'p' && S.db && isBilling()) return archiveProjectBilling(id, on);
   if(!S.db || S.readOnly) return;
   const it = mapOf(kind).get(id); if(!it) return;
   if(kind === 'p' && !canEditP(it)) return;
@@ -1385,7 +1403,7 @@ function renderSettings(){
     body = `<p class="muted shelp">Chaque compte se connecte avec son <strong>email et son mot de passe</strong>. Tout le monde voit tous les projets et toutes les tâches.</p>
     <ul class="muted shelp roles">
       <li><strong>Lecture seule</strong> : consulte sans rien modifier.</li>
-      <li><strong>Facturation</strong> : consulte tout, et modifie l’état de facturation des projets et les fiches clients (raison sociale, ICE, adresse).</li>
+      <li><strong>Facturation</strong> : consulte tout ; modifie l’état de facturation des projets et les fiches clients (raison sociale, ICE, adresse), et peut archiver ou désarchiver un projet.</li>
       <li><strong>Membre</strong> : crée des projets et des tâches, modifie ses projets et toutes les tâches.</li>
       <li><strong>Administrateur</strong> : modifie tous les projets, gère les paramètres et les comptes.</li>
       <li><strong>Super admin</strong> : comme un administrateur ; son compte est protégé, seul un super admin peut le modifier, et seul un super admin peut en nommer un autre.</li>
@@ -2162,7 +2180,7 @@ renderTabs(); renderMain();
   $('#settingsBtn').hidden = !(isAdmin() || isBilling());
   $('#mineBtn').hidden = false;
   if(!canEdit()){ S.readOnly = true; S.err = 'viewer';
-    setSync(isBilling() ? 'Facturation : tu consultes les projets et les tâches, et tu peux modifier l’état de facturation des projets et les fiches clients.' : 'Lecture seule : tu peux consulter les projets et les tâches, mais pas les modifier.'); }
+    setSync(isBilling() ? 'Facturation : tu consultes les projets et les tâches ; tu peux modifier l’état de facturation, archiver un projet et compléter les fiches clients.' : 'Lecture seule : tu peux consulter les projets et les tâches, mais pas les modifier.'); }
   renderMine();
   loadTimer = setTimeout(() => { setSync('Les données ne sont pas encore joignables. Elles s’afficheront dès que la connexion revient.', true); }, 10000);
   subscribe('projects', S.projects, 'p');
