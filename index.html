@@ -264,6 +264,8 @@ body{margin:0}
 .stabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);padding:0 12px;scrollbar-width:thin}
 .shelp{margin:0;font-size:13px}
 .pacts{display:flex;flex-wrap:wrap;gap:8px}
+.btn.tbtn{background:var(--p-orange-bg);color:var(--p-orange-fg);border-color:color-mix(in srgb, var(--s-orange) 45%, transparent);font-weight:600}
+.btn.tbtn:hover{background:color-mix(in srgb, var(--s-orange) 22%, var(--p-orange-bg))}
 .pacts a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .drive input{width:100%}
 .drivefr{width:100%;height:280px;border:1px solid var(--line);border-radius:8px;background:#fff;margin:8px 0}
@@ -1073,7 +1075,7 @@ function renderPanel(){
   }
   const linked = kind === 'p' ? `<div class="sect"><h3>Tâches du projet</h3><div class="linked">${
       tasksOf(id).map(t => `<button type="button" class="item" data-open="t:${esc(t.id)}"><span>${t.name ? esc(t.name) : '<span class="muted">Sans titre</span>'}</span>${statusPill(TSTAT, t.status)}</button>`).join('') || '<span class="muted">Aucune tâche liée.</span>'
-    }</div>${gro ? '' : `<div><button class="btn" type="button" data-act="addtask">+ Ajouter une tâche</button></div>`}</div>` : '';
+    }</div>${gro ? '' : `<div><button class="btn tbtn" type="button" data-act="addtask">+ Ajouter une tâche</button></div>`}</div>` : '';
   const lockNote = kind === 'p' && ro && !gro ? `<p class="muted lock">Seule la personne qui a créé ce projet${it.createdBy ? ` (${esc(personName(it.createdBy))})` : ''} ou un administrateur peut le modifier.</p>` : '';
   const summary = kind === 'p' ? `<div class="sect"><h3><label for="f-summary">Résumé</label></h3><textarea id="f-summary" data-field="summary" rows="3" placeholder="Une phrase sur l’événement">${esc(it.summary||'')}</textarea></div>` : '';
   const dv = kind === 'p' ? driveInfo(it.driveUrl) : null;
