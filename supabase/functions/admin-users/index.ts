@@ -1,4 +1,5 @@
-// Gestion des comptes de l'application (réservée aux administrateurs).
+// Gestion des comptes de l'application (réservée aux administrateurs et super admins).
+// Un administrateur ne peut ni créer, ni modifier, ni supprimer un compte super admin.
 // Actions : create, update, set_password, delete.
 // Utilise la clé service_role, disponible uniquement côté serveur.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -12,7 +13,9 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ROLES = ["admin", "member", "viewer"];
+const ROLES = ["superadmin", "admin", "member", "billing", "viewer"];
+const ADMIN_ROLES = ["superadmin", "admin"];
+const SUPER_ONLY = "Seul un super admin peut modifier un compte super admin.";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -33,7 +36,8 @@ Deno.serve(async (req) => {
     const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
     const { data: me } = await admin.from("app_users").select("id, role")
       .eq("email", (user.email ?? "").toLowerCase()).maybeSingle();
-    if (!me || me.role !== "admin") return json({ error: "Action réservée aux administrateurs." }, 403);
+    if (!me || !ADMIN_ROLES.includes(me.role)) return json({ error: "Action réservée aux administrateurs." }, 403);
+    const meSuper = me.role === "superadmin";
 
     const body = await req.json().catch(() => ({}));
     const action = String(body.action ?? "");
@@ -54,10 +58,12 @@ Deno.serve(async (req) => {
       }
       return null;
     };
-    const adminCount = async () => {
-      const { count } = await admin.from("app_users").select("id", { count: "exact", head: true }).eq("role", "admin");
+    const countRoles = async (roles: string[]) => {
+      const { count } = await admin.from("app_users").select("id", { count: "exact", head: true }).in("role", roles);
       return count ?? 0;
     };
+    const adminCount = () => countRoles(ADMIN_ROLES);
+    const superCount = () => countRoles(["superadmin"]);
     const checkPassword = (p: unknown) => typeof p === "string" && p.length >= 8;
 
     if (action === "create") {
@@ -65,6 +71,8 @@ Deno.serve(async (req) => {
       const role = String(body.role ?? "member");
       if (!EMAIL_RE.test(email)) return json({ error: "Adresse email invalide." }, 400);
       if (!ROLES.includes(role)) return json({ error: "Rôle invalide." }, 400);
+      if (role === "superadmin" && !meSuper) return json({ error: "Seul un super admin peut créer un compte super admin." }, 403);
+      if (current && current.role === "superadmin" && !meSuper) return json({ error: SUPER_ONLY }, 403);
       if (!checkPassword(body.password)) return json({ error: "Le mot de passe doit faire au moins 8 caractères." }, 400);
       const { data: taken } = await admin.from("app_users").select("id").eq("email", email).neq("id", personId).maybeSingle();
       if (taken) return json({ error: "Cette adresse est déjà utilisée par une autre personne." }, 409);
@@ -84,6 +92,8 @@ Deno.serve(async (req) => {
 
     if (!current) return json({ error: "Cette personne n'a pas de compte." }, 404);
     const isSelf = current.id === me.id;
+    // Un administrateur ne touche pas aux comptes super admin
+    if (current.role === "superadmin" && !meSuper && !isSelf) return json({ error: SUPER_ONLY }, 403);
 
     if (action === "set_password") {
       if (!checkPassword(body.password)) return json({ error: "Le mot de passe doit faire au moins 8 caractères." }, 400);
@@ -100,9 +110,13 @@ Deno.serve(async (req) => {
       const email = body.email != null ? String(body.email).trim().toLowerCase() : current.email;
       if (!ROLES.includes(role)) return json({ error: "Rôle invalide." }, 400);
       if (!EMAIL_RE.test(email)) return json({ error: "Adresse email invalide." }, 400);
-      if (isSelf && role !== "admin") return json({ error: "Tu ne peux pas retirer ton propre rôle d'administrateur." }, 400);
-      if (current.role === "admin" && role !== "admin" && (await adminCount()) <= 1) {
+      if (role === "superadmin" && current.role !== "superadmin" && !meSuper) return json({ error: "Seul un super admin peut nommer un super admin." }, 403);
+      if (isSelf && role !== current.role) return json({ error: "Tu ne peux pas modifier ton propre rôle." }, 400);
+      if (ADMIN_ROLES.includes(current.role) && !ADMIN_ROLES.includes(role) && (await adminCount()) <= 1) {
         return json({ error: "Il doit rester au moins un administrateur." }, 400);
+      }
+      if (current.role === "superadmin" && role !== "superadmin" && (await superCount()) <= 1) {
+        return json({ error: "Il doit rester au moins un super admin." }, 400);
       }
       if (email !== current.email) {
         if (isSelf) return json({ error: "Change ta propre adresse depuis le tableau de bord Supabase." }, 400);
@@ -121,8 +135,11 @@ Deno.serve(async (req) => {
 
     if (action === "delete") {
       if (isSelf) return json({ error: "Tu ne peux pas supprimer ton propre accès." }, 400);
-      if (current.role === "admin" && (await adminCount()) <= 1) {
+      if (ADMIN_ROLES.includes(current.role) && (await adminCount()) <= 1) {
         return json({ error: "Il doit rester au moins un administrateur." }, 400);
+      }
+      if (current.role === "superadmin" && (await superCount()) <= 1) {
+        return json({ error: "Il doit rester au moins un super admin." }, 400);
       }
       const u = await findAuthUser(current.email);
       if (u) {

@@ -281,6 +281,9 @@ body{margin:0}
 .hwhat{padding-left:28px;line-height:1.5}
 .archnote{margin:0;padding:8px 12px;border-radius:8px;background:var(--hover);color:var(--muted);font-size:13px}
 .archhelp{margin:0 0 10px}
+.rolebadge{font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--p-purple-bg);color:var(--p-purple-fg)}
+ul.roles{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:3px}
+select.billok{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 .dgon{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
 .dgwhen label{font-size:13px;color:var(--muted)}
 .dgrow{cursor:pointer}
@@ -495,8 +498,11 @@ function fd(s){ const d = parseD(s); return d ? fmtL.format(d) : ''; }
 /* ---------- helpers ---------- */
 function hashColor(str){ let h=0; for(const ch of String(str)) h=(h*31+ch.charCodeAt(0))>>>0; return PALETTE[h % PALETTE.length]; }
 const byCreated = (a,b) => (a.createdAt||0)-(b.createdAt||0) || String(a.id).localeCompare(String(b.id));
-const isAdmin = () => !!(S.me && S.me.role === 'admin');
-const canEdit = () => !!(S.me && (S.me.role === 'admin' || S.me.role === 'member'));
+const isAdmin = () => !!(S.me && (S.me.role === 'admin' || S.me.role === 'superadmin'));
+const isSuper = () => !!(S.me && S.me.role === 'superadmin');
+const isBilling = () => !!(S.me && S.me.role === 'billing');
+const canEdit = () => !!(S.me && ['superadmin','admin','member'].includes(S.me.role));
+const ROLE_LABEL = {superadmin:'super admin', admin:'administrateur', member:'membre', billing:'facturation', viewer:'lecture seule'};
 const mineP = p => !!(S.me && p && [...(p.owners||[]), ...(p.pilots||[]), ...(p.creas||[])].includes(S.me.pid));
 const mineT = t => !!(S.me && ((t.owners||[]).includes(S.me.pid) || (t.project && mineP(S.projects.get(t.project)))));
 const allP = () => [...S.projects.values()];
@@ -508,7 +514,7 @@ function renderMine(){
   b.setAttribute('aria-pressed', S.mine ? 'true' : 'false');
   b.textContent = S.mine ? 'Mes affectations' : 'Tous les projets';
   const p = S.me && S.people.get(S.me.pid);
-  $('#whoName').textContent = p ? (p.name || '') + (' · ' + ({admin:'administrateur', member:'membre', viewer:'lecture seule'}[S.me.role] || '')) : '';
+  $('#whoName').textContent = p ? (p.name || '') + (' · ' + (ROLE_LABEL[S.me.role] || '')) : '';
 }
 const canEditP = p => !!(S.db && !S.readOnly && p && (isAdmin() || (S.me && p.createdBy && p.createdBy === S.me.pid)));
 const tasksOf = pid =>tasks().filter(t => t.project === pid);
@@ -1103,6 +1109,8 @@ function renderPanel(){
             : `<button class="btn" type="button" data-act="arch" title="${kind==='p' ? 'Retire le projet et ses tâches des vues, sans les supprimer' : 'Retire la tâche des vues, sans la supprimer'}">Archiver ${kind==='p'?'le projet':'la tâche'}</button>`}<button class="btn danger" type="button" data-act="del">Supprimer ${kind==='p'?'le projet':'la tâche'}</button>`}</div>`)}
     </div>`;
   if(ro) panel.querySelectorAll('input,select,textarea').forEach(el => el.disabled = true);
+  // Facturation : le seul champ modifiable est l'état de facturation
+  if(kind === 'p' && S.db && isBilling()){ const b = panel.querySelector('#f-billing'); if(b){ b.disabled = false; b.classList.add('billok'); } }
   panel.hidden = false; scrim.hidden = false;
   const np = panel.querySelector('#f-newperson'); if(np) np.focus();
   const nc = panel.querySelector('#f-newclient'); if(nc) nc.focus();
@@ -1330,6 +1338,7 @@ function removePerson(id){
 }
 function openSettings(){ S.open = {kind:'s'}; renderPanel(); }
 function renderSettings(){
+  if(isBilling()) S.sTab = 'clients';
   const ro = !S.db || S.readOnly, tab = S.sTab;
   let body = '';
   if(tab === 'pstat'){
@@ -1347,7 +1356,10 @@ function renderSettings(){
     const acc = p => S.users.get(p.id);
     const withAcc = all.filter(acc), without = all.filter(p => !acc(p));
     const ed = S.uEdit || {}, busy = S.uBusy;
-    const roleOpts = r => `<option value="viewer"${r === 'viewer' ? ' selected' : ''}>Lecture seule</option><option value="member"${r === 'member' ? ' selected' : ''}>Membre</option><option value="admin"${r === 'admin' ? ' selected' : ''}>Administrateur</option>`;
+    const ROLE_OPTS = [['viewer','Lecture seule'],['billing','Facturation'],['member','Membre'],['admin','Administrateur'],['superadmin','Super admin']];
+    // seul un super admin peut proposer le rôle « Super admin »
+    const roleOpts = r => ROLE_OPTS.filter(([v]) => v !== 'superadmin' || isSuper() || r === 'superadmin')
+      .map(([v, l]) => `<option value="${v}"${r === v ? ' selected' : ''}>${l}</option>`).join('');
     const pwdField = pid => `<input type="text" class="pwd mono" id="u-pwd" value="${esc(ed.pwd||'')}" placeholder="Mot de passe (8 caractères min.)" autocomplete="new-password" aria-label="Mot de passe" spellcheck="false"><button class="btn" type="button" data-sact="ugen" data-id="${esc(pid)}">Générer</button>`;
     const row = p => { const u = acc(p), self = S.me && p.id === S.me.pid, id = esc(p.id), dis = busy ? ' disabled' : '';
       let extra = '';
@@ -1356,6 +1368,11 @@ function renderSettings(){
           <button class="btn primary" type="button" data-sact="usave" data-id="${id}"${dis}>Créer le compte</button><button class="btn" type="button" data-sact="ucancel">Annuler</button></div>`;
       else if(ed.pid === p.id && ed.mode === 'pwd') extra = `<div class="uform">${pwdField(p.id)}<button class="btn primary" type="button" data-sact="usave" data-id="${id}"${dis}>Enregistrer le mot de passe</button><button class="btn" type="button" data-sact="ucancel">Annuler</button></div>`;
       else if(ed.pid === p.id && ed.mode === 'del') extra = `<div class="uform confirm"><span>Supprimer le compte de ${esc(p.name||'cette personne')} ? Elle ne pourra plus se connecter. Ses projets et tâches ne changent pas.</span><button class="btn" type="button" data-sact="ucancel">Annuler</button><button class="btn danger" type="button" data-sact="usave" data-id="${id}"${dis}>Supprimer</button></div>`;
+      // un administrateur ne peut pas toucher au compte d'un super admin
+      const locked = u && u.role === 'superadmin' && !isSuper() && !self;
+      if(u && locked) return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${id}" aria-label="Nom">${pcolorSel(p)}
+        <span class="rolebadge super">Super admin</span>
+        <div class="sx"><input type="email" value="${esc(u.email)}" aria-label="Email de ${esc(p.name||'')}" disabled><span class="muted shelp">Compte protégé : seul un super admin peut le modifier.</span></div></div>`;
       if(u) return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${id}" aria-label="Nom">${pcolorSel(p)}
         <select data-urole="${id}" aria-label="Rôle de ${esc(p.name||'')}"${self || busy ? ' disabled' : ''}${self ? ' title="Tu ne peux pas modifier ton propre rôle"' : ''}>${roleOpts(u.role)}</select>
         <div class="sx"><input type="email" value="${esc(u.email)}" data-uemail="${id}" aria-label="Email de ${esc(p.name||'')}"${self || busy ? ' disabled' : ''}>
@@ -1364,7 +1381,14 @@ function renderSettings(){
         extra = `<div class="uform confirm"><span>Supprimer ${esc(p.name||'cette personne')} de l’application ?${u.n ? ` Son nom sera retiré de ${esc(u.text)}.` : ''}</span><button class="btn" type="button" data-sact="ucancel">Annuler</button><button class="btn danger" type="button" data-sact="pdelok" data-id="${id}"${dis}>Supprimer</button></div>`; }
       return `<div class="srow">${avatar(p.id)}<input type="text" value="${esc(p.name||'')}" data-pn="${id}" aria-label="Nom">${pcolorSel(p)}
         ${ed.pid === p.id ? '' : `<span class="sact"><button class="btn" type="button" data-sact="ucreate" data-id="${id}"${dis}>Créer un compte</button><button class="btn danger" type="button" data-sact="pdel" data-id="${id}"${dis}>Supprimer</button></span>`}${extra}</div>`; };
-    body = `<p class="muted shelp">Chaque compte se connecte avec son <strong>email et son mot de passe</strong>. Tout le monde voit tous les projets et toutes les tâches. <strong>Lecture seule</strong> : consulte sans rien modifier. <strong>Membre</strong> : peut créer, modifier et supprimer projets et tâches. <strong>Administrateur</strong> : comme un membre, avec en plus l’accès aux paramètres et aux comptes.</p>
+    body = `<p class="muted shelp">Chaque compte se connecte avec son <strong>email et son mot de passe</strong>. Tout le monde voit tous les projets et toutes les tâches.</p>
+    <ul class="muted shelp roles">
+      <li><strong>Lecture seule</strong> : consulte sans rien modifier.</li>
+      <li><strong>Facturation</strong> : consulte tout, et modifie l’état de facturation des projets et les fiches clients (raison sociale, ICE, adresse).</li>
+      <li><strong>Membre</strong> : crée des projets et des tâches, modifie ses projets et toutes les tâches.</li>
+      <li><strong>Administrateur</strong> : modifie tous les projets, gère les paramètres et les comptes.</li>
+      <li><strong>Super admin</strong> : comme un administrateur ; son compte est protégé, seul un super admin peut le modifier, et seul un super admin peut en nommer un autre.</li>
+    </ul>
     <p class="muted shelp">Pour créer un compte : « Créer un compte », saisis l’email, un mot de passe provisoire (ou « Générer »), choisis le rôle, puis transmets l’email et le mot de passe à la personne. Elle pourra ensuite le changer avec « Mon mot de passe ».</p>
     ${S.userMsg ? `<p class="shelp" role="status" style="color:${S.userOk ? 'var(--accent)' : 'var(--danger)'}">${esc(S.userMsg)}</p>` : ''}
     <h3 class="sh">Avec accès <span class="suse">${withAcc.length}</span></h3>
@@ -1434,12 +1458,13 @@ function renderSettings(){
     <div class="ph"><span class="kind">Paramètres</span>
       <button class="iconbtn" type="button" data-act="close" aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></div>
     <div class="sgrid">
-      <nav class="snav" aria-label="Sections des paramètres">
+      <nav class="snav" aria-label="Sections des paramètres">${isBilling() ? `
+        <div class="sg">Projets</div>${navBtn('clients')}` : `
         <div class="sg">Accès</div>${navBtn('users')}
         <div class="sg">Projets</div>${navBtn('pstat')}${navBtn('clients')}
         <div class="sg">Tâches</div>${navBtn('tags')}
         <div class="sg">Équipe</div>${navBtn('owners')}${navBtn('pilots')}${navBtn('creas')}
-        <div class="sg">Données</div>${navBtn('digest')}${navBtn('backup')}
+        <div class="sg">Données</div>${navBtn('digest')}${navBtn('backup')}`}
       </nav>
       <div class="pbody"><h2 class="stitle">${esc(label)}</h2>${body}</div>
     </div>`;
@@ -1447,7 +1472,9 @@ function renderSettings(){
   const addRow = panel.querySelector('.pbody #s-new') && panel.querySelector('.pbody #s-new').closest('.sadd');
   const firstBlock = panel.querySelector('.pbody .sfilter, .pbody h3.sh, .pbody .slist');
   if(addRow && firstBlock){ addRow.classList.add('top'); firstBlock.before(addRow); }
-  if(ro) panel.querySelectorAll('.pbody input,.pbody select,.pbody button').forEach(el => el.disabled = true);
+  // Facturation : seuls raison sociale, ICE, adresse (et la recherche) restent modifiables
+  if(ro) panel.querySelectorAll('.pbody input,.pbody select,.pbody button').forEach(el => { if(!(S.db && isBilling() && (el.dataset.cf || el.id === 's-filter'))) el.disabled = true; });
+  if(ro && isBilling()){ const a = panel.querySelector('.pbody .sadd.top'); if(a) a.remove(); }
   panel.hidden = false; scrim.hidden = false;
 }
 const svgI = d => `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
@@ -1619,7 +1646,18 @@ function settingsClick(e){
   const ni = $('#s-new'); if(ni && /^add/.test(a)) ni.focus();
 }
 function settingsChange(e){
-  const el = e.target; if(!S.db || S.readOnly) return;
+  const el = e.target;
+  // Facturation : fiches clients via une fonction serveur dédiée (raison sociale, ICE, adresse uniquement)
+  if(S.db && isBilling() && el.dataset.cf){
+    const cl = clientList(), c = cl[+el.dataset.i], k = el.dataset.cf; if(!c || !['rs','ice','addr'].includes(k)) return;
+    const v = el.value.trim(); if((c[k]||'') === v) return;
+    if(v) c[k] = v; else delete c[k];
+    S.clients = cl; S.meta = {...S.meta, clients: cl};
+    S.sb.rpc('set_client_info', {cname: c.n, rs: c.rs || '', ice: c.ice || '', addr: c.addr || ''})
+      .then(r => { if(r.error) onWriteError(r.error); else setSync('Fiche client enregistrée.'); });
+    return;
+  }
+  if(!S.db || S.readOnly) return;
   if(el.dataset.urole != null || el.dataset.uemail != null){
     const pid = el.dataset.urole != null ? el.dataset.urole : el.dataset.uemail, cur = S.users.get(pid), p = S.people.get(pid); if(!cur) return;
     const body = {action:'update', person_id:pid};
@@ -1774,6 +1812,13 @@ panel.addEventListener('change', async e => {
   if(S.open.kind === 'me') return;
   const {kind, id} = S.open; const it = mapOf(kind).get(id); if(!it) return;
   const el = e.target;
+  if(el.id === 'f-billing' && kind === 'p' && isBilling()){
+    const v = el.value || null; if((it.billing || null) === v) return;
+    S.projects.set(id, {...it, billing: v}); renderMain();
+    const r = await S.sb.rpc('set_billing', {pid: id, val: v || ''});
+    if(r.error){ S.projects.set(id, it); onWriteError(r.error); renderMain(); renderPanel(); return; }
+    setSync('État de facturation enregistré.'); refreshHistSoon(id); return;
+  }
   if(el.dataset.addperson){
     const pf = el.dataset.addperson, v = el.value.trim(); if(!v) return;
     const lc = v.toLowerCase(), all = [...S.people.values()];
@@ -2113,9 +2158,10 @@ renderTabs(); renderMain();
   S.mine = LS.get('pt.mine', '0') === '1';
   const db = makeDb(sb);
   S.db = db; S.sb = sb;
-  $('#settingsBtn').hidden = !isAdmin();
+  $('#settingsBtn').hidden = !(isAdmin() || isBilling());
   $('#mineBtn').hidden = false;
-  if(!canEdit()){ S.readOnly = true; S.err = 'viewer'; setSync('Lecture seule : tu peux consulter les projets et les tâches, mais pas les modifier.'); }
+  if(!canEdit()){ S.readOnly = true; S.err = 'viewer';
+    setSync(isBilling() ? 'Facturation : tu consultes les projets et les tâches, et tu peux modifier l’état de facturation des projets et les fiches clients.' : 'Lecture seule : tu peux consulter les projets et les tâches, mais pas les modifier.'); }
   renderMine();
   loadTimer = setTimeout(() => { setSync('Les données ne sont pas encore joignables. Elles s’afficheront dès que la connexion revient.', true); }, 10000);
   subscribe('projects', S.projects, 'p');
