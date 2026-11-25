@@ -704,9 +704,9 @@ function viewProjectsOf(ps){
       const groups = PSTAT.filter(s => s.g === 'prog').map(s => ({s, items: ps.filter(p => p.status === s.n)})).filter(g => g.items.length);
       if(!groups.length) return emptyBox('Aucun projet actif', 'Les projets planifiés, en cours ou en pause apparaissent ici.');
       return groups.map(g => `<div class="group"><div class="ghead">${pill(g.s.n, g.s.c, 'status')}<span class="count">${g.items.length}</span></div>${
-        table([PC.code, PC.name, PC.status, PC.tasks, PC.createdBy, PC.pilot, PC.dates, PC.prio, PC.bill, PC.blocked], sortRows(g.items, S.pSort), 'p', S.pSort || {})}</div>`).join('');
+        table([PC.code, PC.name, PC.status, PC.tasks, PC.dates, PC.createdBy, PC.pilot,PC.prio, PC.bill, PC.blocked], sortRows(g.items, S.pSort), 'p', S.pSort || {})}</div>`).join('');
     }
-    case 'tous': return table([PC.code, PC.name, PC.status, PC.client, PC.createdBy, PC.pilot, PC.crea, PC.dates, PC.prio, PC.bill, PC.blocked], sortRows(ps, S.pSort), 'p', S.pSort || {});
+    case 'tous': return table([PC.code, PC.name, PC.status, PC.client, PC.dates, PC.createdBy, PC.pilot, PC.crea,PC.prio, PC.bill, PC.blocked], sortRows(ps, S.pSort), 'p', S.pSort || {});
     case 'kanban': return sortBar('p') + board(PSTAT.map(s => ({v:s.n, label:pill(s.n, s.c, 'status'), items: sortRows(ps.filter(p => p.status === s.n), S.pSort)})), 'p', 'status', pCard);
     case 'client': {
       const act = sortRows(ps, S.pSort);
