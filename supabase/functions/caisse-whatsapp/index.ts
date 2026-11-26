@@ -30,7 +30,8 @@ const WA_VERIFY = env("WHATSAPP_VERIFY_TOKEN");
 const WA_VERSION = env("WHATSAPP_API_VERSION") || "v23.0";
 const GRAPH = `https://graph.facebook.com/${WA_VERSION}`;
 
-const MODEL = "claude-opus-5-5";
+// Le modèle le moins cher (choix de l'utilisateur) : moins d'un centime de dirham par message.
+const MODEL = "claude-haiku-5-5";
 const BUCKET = "caisse-justificatifs";
 const ETAPE_VALIDITE_MS = 3 * 60 * 60 * 1000; // une question reste valable 3 h
 const MEDIA_MAX = 10 * 1024 * 1024;
@@ -411,11 +412,9 @@ ${categories.map((c) => `${c.nom} : ${(c.mots_cles ?? []).join("، ")}`).join("\
   }
   contenu.push({ type: "text", text: `${contexte}\n\nMessage de l'intervenant :\n<message>\n${texte ?? "(photo sans texte)"}\n</message>` });
 
-  const reponse: any = await (claude.beta.messages.create as any)({
+  const reponse: any = await (claude.messages.create as any)({
     model: MODEL,
     max_tokens: 8000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
     output_config: { effort: "medium" },
     system: SYSTEME,
     tools: [OUTIL],
