@@ -315,7 +315,7 @@ function viewValider(){
     const src = {whatsapp_texte:'WhatsApp texte', whatsapp_vocal:'WhatsApp vocal', whatsapp_photo:'WhatsApp photo', saisie:'Saisie', import:'Import'}[d.source] || d.source;
     return `<article class="vcard" data-id="${esc(d.id)}">
       <div class="vtop"><strong>${esc(d.payeur === 'direct' ? 'Payé en direct' : ouvName(d.ouvrier_id))}</strong><span class="date muted">${fmtDate(d.date_op)}</span><span class="pill p-info">${esc(src)}</span>
-        ${d.justificatif ? `<button class="linkbtn small" type="button" data-justif="${esc(d.justificatif)}">Voir le justificatif</button>` : ''}</div>
+        ${d.justificatif ? `<button class="linkbtn small" type="button" data-justif="${esc(d.justificatif)}">${d.source === 'whatsapp_vocal' ? '🎤 Écouter le vocal' : 'Voir le justificatif'}</button>` : ''}</div>
       ${m && m.texte ? `<div class="vmsg" dir="auto">${esc(m.texte)}</div>` : (d.libelle ? `<div class="vmsg" dir="auto">${esc(d.libelle)}</div>` : '')}
       <div class="vfields">
         <label>Montant (DH)<input type="number" min="0.01" step="0.01" inputmode="decimal" data-k="montant" value="${d.montant ?? ''}" ${ro}></label>
