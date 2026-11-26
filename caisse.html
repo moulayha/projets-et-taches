@@ -164,7 +164,7 @@ dialog::backdrop{background:rgba(10,20,18,.45)}
       <button type="button" role="tab" data-tab="bord">Tableau de bord</button>
       <button type="button" role="tab" data-tab="mvt">Mouvements</button>
       <button type="button" role="tab" data-tab="projets">Projets</button>
-      <button type="button" role="tab" data-tab="ouvriers">Ouvriers</button>
+      <button type="button" role="tab" data-tab="ouvriers">Intervenants</button>
       <button type="button" role="tab" data-tab="reglages" id="tabReglages" hidden>Réglages</button>
     </nav>
     <section id="view" role="tabpanel"></section>
@@ -203,16 +203,16 @@ function friendly(err){
   const m = (err && (err.message || err.error_description)) || String(err || '');
   if(/pas actif pour la caisse/i.test(m)) return 'Ce projet n’est pas actif : choisis un projet validé, en exploitation ou en facturation.';
   if(/caisse_depenses_validee_ck/.test(m)) return 'Pour valider, il faut un montant, un projet et une catégorie.';
-  if(/caisse_depenses_payeur_ck/.test(m)) return 'Choisis l’ouvrier qui a payé, ou « Payé en direct ».';
+  if(/caisse_depenses_payeur_ck/.test(m)) return 'Choisis l’intervenant qui a payé, ou « Payé en direct ».';
   if(/telephone/.test(m) && /check/i.test(m)) return 'Numéro invalide : écris-le au format international, par exemple +212612345678.';
-  if(/duplicate key/i.test(m) && /telephone/.test(m)) return 'Ce numéro est déjà utilisé par un autre ouvrier.';
+  if(/duplicate key/i.test(m) && /telephone/.test(m)) return 'Ce numéro est déjà utilisé par un autre intervenant.';
   if(/duplicate key/i.test(m) && /nom_court/.test(m)) return 'Ce nom court est déjà utilisé par un autre projet.';
   if(/foreign key|violates.*restrict/i.test(m)) return 'Impossible : des mouvements sont encore liés à cet élément.';
   if(/row-level security|permission denied|42501/i.test(m)) return 'Action non autorisée avec ton niveau d’accès.';
   return 'Erreur : ' + m;
 }
 const projName = id => id ? ((S.projets.get(id) || {}).name || 'Projet supprimé') : '—';
-const ouvName = id => id ? ((S.ouvriers.find(o => o.id === id) || {}).nom || 'Ouvrier supprimé') : '—';
+const ouvName = id => id ? ((S.ouvriers.find(o => o.id === id) || {}).nom || 'Intervenant supprimé') : '—';
 const catOf = id => S.categories.find(c => c.id === id);
 const catName = id => { const c = catOf(id); return c ? `${c.icone ? c.icone + ' ' : ''}${c.nom}` : '—'; };
 const personName = id => id ? ((S.people.get(id) || {}).name || '') : '';
@@ -266,7 +266,7 @@ function render(){
 }
 const addButtons = () => canWrite() ? `<div class="acts">
   <button class="btn" type="button" data-new="alim">+ Alimentation caisse</button>
-  <button class="btn" type="button" data-new="avance">+ Avance ouvrier</button>
+  <button class="btn" type="button" data-new="avance">+ Avance intervenant</button>
   <button class="btn primary" type="button" data-new="depense">+ Dépense</button></div>` : '';
 
 function viewBord(){
@@ -281,17 +281,17 @@ function viewBord(){
   <div class="kpis">
     <div class="kpi"><div class="l">Caisse principale</div><div class="v ${Number(p.solde) < 0 ? 'neg' : ''}">${dh(p.solde)}</div>
       <div class="s">Alimentations ${dh(p.alimentations)} − avances ${dh(p.avances)} − paiements directs ${dh(p.depenses_directes)}</div></div>
-    <div class="kpi"><div class="l">Argent chez les ouvriers</div><div class="v">${dh(chezOuvriers)}</div>
-      <div class="s">${dus ? `La société doit ${dh(dus)} aux ouvriers en négatif` : 'Aucun ouvrier en négatif'}</div></div>
+    <div class="kpi"><div class="l">Argent chez les intervenants</div><div class="v">${dh(chezOuvriers)}</div>
+      <div class="s">${dus ? `La société doit ${dh(dus)} aux intervenants en négatif` : 'Aucun intervenant en négatif'}</div></div>
     <div class="kpi"><div class="l">Dépenses validées ce mois</div><div class="v">${dh(moisDep)}</div><div class="s">depuis le ${fmtDate(m0)}</div></div>
     <div class="kpi"><div class="l">À valider</div><div class="v">${nbVal}</div><div class="s">${nbVal ? '<button class="linkbtn" type="button" data-goto="valider">Ouvrir la file</button>' : 'Rien en attente'}</div></div>
   </div>
-  <h3>Solde par ouvrier</h3>
-  ${rows.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Ouvrier</th><th class="num">Avances reçues</th><th class="num">Dépenses validées</th><th class="num">Solde en main</th><th class="num">À valider</th></tr></thead><tbody>
+  <h3>Solde par intervenant</h3>
+  ${rows.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Intervenant</th><th class="num">Avances reçues</th><th class="num">Dépenses validées</th><th class="num">Solde en main</th><th class="num">À valider</th></tr></thead><tbody>
     ${rows.map(s => `<tr class="row" data-ouvrier="${esc(s.ouvrier_id)}"><td>${esc(s.nom)}${s.actif ? '' : ' <span class="pill p-gray">inactif</span>'}</td><td class="num">${dh(s.avances)}</td><td class="num">${dh(s.depenses)}</td>
       <td class="num ${Number(s.solde) < 0 ? 'neg' : ''}">${dh(s.solde)}</td><td class="num">${s.nb_a_valider ? `<span class="pill p-warn">${s.nb_a_valider}</span>` : ''}</td></tr>`).join('')}
-  </tbody></table></div><p class="muted small">Un solde négatif veut dire que l’ouvrier a avancé de son argent : la société le lui doit.</p>`
-  : `<div class="empty">Aucun ouvrier pour le moment.${isSuper() ? ' Ajoute-les dans l’onglet <button class="linkbtn" type="button" data-goto="ouvriers">Ouvriers</button>.' : ''}</div>`}`;
+  </tbody></table></div><p class="muted small">Un solde négatif veut dire que l’intervenant a avancé de son argent : la société le lui doit.</p>`
+  : `<div class="empty">Aucun intervenant pour le moment.${isSuper() ? ' Ajoute-les dans l’onglet <button class="linkbtn" type="button" data-goto="ouvriers">Intervenants</button>.' : ''}</div>`}`;
 }
 
 function projOptions(selected, opts = {}){
@@ -302,7 +302,7 @@ function projOptions(selected, opts = {}){
 }
 const catOptions = (selected) => `<option value="">— Catégorie —</option>` + S.categories.filter(c => c.actif || c.id === selected).map(c =>
   `<option value="${esc(c.id)}" ${c.id === selected ? 'selected' : ''}>${esc((c.icone ? c.icone + ' ' : '') + c.nom)}</option>`).join('');
-const ouvOptions = (selected, empty) => `<option value="">${empty || '— Ouvrier —'}</option>` + S.ouvriers.filter(o => o.actif || o.id === selected).map(o =>
+const ouvOptions = (selected, empty) => `<option value="">${empty || '— Intervenant —'}</option>` + S.ouvriers.filter(o => o.actif || o.id === selected).map(o =>
   `<option value="${esc(o.id)}" ${o.id === selected ? 'selected' : ''}>${esc(o.nom)}</option>`).join('');
 
 function viewValider(){
@@ -332,7 +332,7 @@ function movements(){
   const rows = [];
   S.alims.forEach(a => rows.push({k:'alim', id:a.id, date:a.date_op, created:a.created_at, type:'Alimentation', ouvrier:'', projet:'', cat:'', libelle:[a.origine, a.note].filter(Boolean).join(' · '), entree:Number(a.montant), sortie:0, statut:'validee', raw:a}));
   S.avances.forEach(a => rows.push({k:'avance', id:a.id, date:a.date_op, created:a.created_at, type:'Avance', ouvrier:a.ouvrier_id, projet:a.project_id || '', cat:'', libelle:a.note, entree:0, sortie:Number(a.montant), statut:'validee', raw:a}));
-  S.depenses.forEach(d => rows.push({k:'depense', id:d.id, date:d.date_op, created:d.created_at, type:d.payeur === 'direct' ? 'Paiement direct' : 'Dépense ouvrier', ouvrier:d.ouvrier_id || '', projet:d.project_id || '', cat:d.categorie_id || '', libelle:d.libelle, entree:0, sortie:Number(d.montant || 0), statut:d.statut, raw:d}));
+  S.depenses.forEach(d => rows.push({k:'depense', id:d.id, date:d.date_op, created:d.created_at, type:d.payeur === 'direct' ? 'Paiement direct' : 'Dépense intervenant', ouvrier:d.ouvrier_id || '', projet:d.project_id || '', cat:d.categorie_id || '', libelle:d.libelle, entree:0, sortie:Number(d.montant || 0), statut:d.statut, raw:d}));
   return rows.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created || '').localeCompare(a.created || ''));
 }
 function filteredMovements(){
@@ -350,12 +350,12 @@ function viewMvt(){
     <label>Du <input type="date" data-f="du" value="${esc(f.du)}"></label><label>au <input type="date" data-f="au" value="${esc(f.au)}"></label>
     <select data-f="type" aria-label="Type"><option value="">Tous les types</option>${[['alim', 'Alimentations'], ['avance', 'Avances'], ['depense', 'Dépenses']].map(([k, l]) => `<option value="${k}" ${f.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
     <select data-f="projet" aria-label="Projet"><option value="">Tous les projets</option>${usedProj.map(p => `<option value="${esc(p.id)}" ${f.projet === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
-    <select data-f="ouvrier" aria-label="Ouvrier">${ouvOptions(f.ouvrier, 'Tous les ouvriers')}</select>
+    <select data-f="ouvrier" aria-label="Intervenant">${ouvOptions(f.ouvrier, 'Tous les intervenants')}</select>
     <select data-f="cat" aria-label="Catégorie"><option value="">Toutes les catégories</option>${S.categories.map(c => `<option value="${esc(c.id)}" ${f.cat === c.id ? 'selected' : ''}>${esc(c.nom)}</option>`).join('')}</select>
     <select data-f="statut" aria-label="Statut"><option value="">Tous les statuts</option>${Object.entries(STATUT).map(([k, [l]]) => `<option value="${k}" ${f.statut === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
     <button class="btn sm" type="button" id="resetF">Effacer les filtres</button>
   </div>
-  ${rows.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Date</th><th>Type</th><th>Ouvrier</th><th>Projet</th><th>Catégorie</th><th>Libellé</th><th class="num">Entrée</th><th class="num">Sortie</th><th>Statut</th></tr></thead><tbody>
+  ${rows.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Date</th><th>Type</th><th>Intervenant</th><th>Projet</th><th>Catégorie</th><th>Libellé</th><th class="num">Entrée</th><th class="num">Sortie</th><th>Statut</th></tr></thead><tbody>
   ${rows.map(r => `<tr class="row" data-edit="${r.k}:${esc(r.id)}"><td class="date">${fmtDate(r.date)}</td><td>${esc(r.type)}</td><td>${r.ouvrier ? esc(ouvName(r.ouvrier)) : '<span class="muted">—</span>'}</td>
     <td>${r.projet ? esc(projName(r.projet)) : '<span class="muted">—</span>'}</td><td>${r.cat ? esc(catName(r.cat)) : '<span class="muted">—</span>'}</td><td dir="auto">${esc(r.libelle || '')}${r.raw.justificatif ? ' 📎' : ''}</td>
     <td class="num">${r.entree ? dh(r.entree) : ''}</td><td class="num">${r.sortie ? dh(r.sortie) : ''}</td><td><span class="pill ${STATUT[r.statut][1]}">${STATUT[r.statut][0]}</span></td></tr>`).join('')}
@@ -372,7 +372,7 @@ function viewProjets(){
   const actifIds = new Set(S.actifs.map(p => p.id));
   const list = [...by.values()].sort((a, b) => (actifIds.has(b.id) - actifIds.has(a.id)) || b.dep - a.dep || projName(a.id).localeCompare(projName(b.id), 'fr'));
   if(!list.length) return '<div class="head"><h2>Projets</h2></div><div class="empty">Aucun projet actif.</div>';
-  return `<div class="head"><h2>Coût par projet</h2></div><p class="muted small" style="margin-top:-6px">Dépenses validées, payées par un ouvrier ou en direct. Projets actifs : état « ${esc((S.reglages.statuts_actifs || []).join(' », « '))} ».</p><div class="pgrid">` + list.map(x => {
+  return `<div class="head"><h2>Coût par projet</h2></div><p class="muted small" style="margin-top:-6px">Dépenses validées, payées par un intervenant ou en direct. Projets actifs : état « ${esc((S.reglages.statuts_actifs || []).join(' », « '))} ».</p><div class="pgrid">` + list.map(x => {
     const p = S.projets.get(x.id) || {}, a = S.actifs.find(y => y.id === x.id) || {}, budget = a.budget != null ? Number(a.budget) : null;
     const pct = budget ? Math.min(100, x.dep / budget * 100) : 0;
     const cats = [...x.cats.entries()].sort((m, n) => n[1] - m[1]);
@@ -388,12 +388,12 @@ function viewProjets(){
 
 function viewOuvriers(){
   const so = new Map(S.soldes.map(s => [s.ouvrier_id, s]));
-  return `<div class="head"><h2>Ouvriers <span class="muted small">${S.ouvriers.length}</span></h2>${isSuper() ? '<div class="acts"><button class="btn primary" type="button" data-new="ouvrier">+ Ouvrier</button></div>' : ''}</div>
+  return `<div class="head"><h2>Intervenants <span class="muted small">${S.ouvriers.length}</span></h2>${isSuper() ? '<div class="acts"><button class="btn primary" type="button" data-new="ouvrier">+ Intervenant</button></div>' : ''}</div>
   ${S.ouvriers.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Nom</th><th>Téléphone WhatsApp</th><th>État</th><th class="num">Solde en main</th><th>Note</th></tr></thead><tbody>
   ${S.ouvriers.map(o => { const s = so.get(o.id) || {}; return `<tr class="${isSuper() ? 'row' : ''}" ${isSuper() ? `data-edit="ouvrier:${esc(o.id)}"` : ''}><td>${esc(o.nom)}</td><td class="mono">${esc(o.telephone || '—')}</td>
     <td>${o.actif ? '<span class="pill p-ok">Actif</span>' : '<span class="pill p-gray">Inactif</span>'}</td><td class="num ${Number(s.solde) < 0 ? 'neg' : ''}">${dh(s.solde)}</td><td class="muted">${esc(o.note)}</td></tr>`; }).join('')}
-  </tbody></table></div><p class="muted small">Le bot WhatsApp ne reconnaît que les numéros enregistrés ici, au format international (+212…).${isSuper() ? '' : ' Seul un super admin peut ajouter ou modifier un ouvrier.'}</p>`
-  : `<div class="empty">Aucun ouvrier enregistré.${isSuper() ? ' Ajoute ton équipe avec « + Ouvrier ».' : ''}</div>`}`;
+  </tbody></table></div><p class="muted small">Le bot WhatsApp ne reconnaît que les numéros enregistrés ici, au format international (+212…).${isSuper() ? '' : ' Seul un super admin peut ajouter ou modifier un intervenant.'}</p>`
+  : `<div class="empty">Aucun intervenant enregistré.${isSuper() ? ' Ajoute ton équipe avec « + Intervenant ».' : ''}</div>`}`;
 }
 
 function viewReglages(){
@@ -417,7 +417,7 @@ function viewReglages(){
     <div class="chk" id="statuts">${statuts.map(s => `<label><input type="checkbox" value="${esc(s)}" ${actifs.has(s) ? 'checked' : ''}> ${esc(s)}</label>`).join('')}</div>
     <div style="margin-top:10px"><button class="btn primary" type="button" id="saveStatuts">Enregistrer</button></div></div>
 
-  <div class="setcard"><h3>Numéro WhatsApp du bot</h3><p class="muted small">Le numéro dédié sur lequel les ouvriers enverront leurs dépenses (étape WhatsApp).</p>
+  <div class="setcard"><h3>Numéro WhatsApp du bot</h3><p class="muted small">Le numéro dédié sur lequel les intervenants enverront leurs dépenses (étape WhatsApp).</p>
     <div class="inline"><input type="tel" id="waNum" placeholder="+212612345678" value="${esc(S.reglages.whatsapp || '')}" aria-label="Numéro WhatsApp"><button class="btn primary" type="button" id="saveWa">Enregistrer</button></div></div>
 
   <div class="setcard"><h3>Projets : nom court et budget</h3><p class="muted small">Le nom court aide le bot à reconnaître le projet dans un message (ex. « botola »). Le budget est optionnel.</p>
@@ -464,7 +464,7 @@ function bindView(){
         act.disabled = true; await run(S.sb.from('caisse_depenses').update({...patch, statut:'validee'}).eq('id', id), 'Dépense validée.');
       }
       if(act.dataset.act === 'rejeter'){
-        if(!confirm('Rejeter cette dépense ? Elle ne comptera ni dans le solde de l’ouvrier ni dans le coût du projet.')) return;
+        if(!confirm('Rejeter cette dépense ? Elle ne comptera ni dans le solde de l’intervenant ni dans le coût du projet.')) return;
         act.disabled = true; await run(S.sb.from('caisse_depenses').update({...patch, statut:'rejetee'}).eq('id', id), 'Dépense rejetée.');
       }
       return;
@@ -549,15 +549,15 @@ function openForm(kind, id, override){
     body = `<div class="frow">${dateF}${montantF}</div><label class="f"><span>Origine</span><input type="text" name="origine" placeholder="ex. avance client Inwi, retrait banque" value="${esc(cur.origine || '')}" ${dis}></label>
       <label class="f"><span>Note</span><textarea name="note" rows="2" ${dis}>${esc(cur.note || '')}</textarea></label>`;
   } else if(kind === 'avance'){
-    title = id ? 'Avance à un ouvrier' : 'Nouvelle avance (تسبيق)';
-    body = `<div class="frow">${dateF}${montantF}</div><label class="f"><span>Ouvrier</span><select name="ouvrier_id" required ${dis}>${ouvOptions(cur.ouvrier_id)}</select></label>
+    title = id ? 'Avance à un intervenant' : 'Nouvelle avance (تسبيق)';
+    body = `<div class="frow">${dateF}${montantF}</div><label class="f"><span>Intervenant</span><select name="ouvrier_id" required ${dis}>${ouvOptions(cur.ouvrier_id)}</select></label>
       <label class="f"><span>Projet (optionnel)</span><select name="project_id" ${dis}>${projOptions(cur.project_id, {empty:'— Aucun projet précis —'})}</select></label>
       <label class="f"><span>Note</span><textarea name="note" rows="2" ${dis}>${esc(cur.note || '')}</textarea></label>`;
   } else if(kind === 'depense'){
     const payeur = cur.payeur || 'ouvrier';
     title = id ? 'Dépense' : 'Nouvelle dépense';
-    body = `<div class="seg" role="radiogroup" aria-label="Qui a payé ?"><label><input type="radio" name="payeur" value="ouvrier" ${payeur === 'ouvrier' ? 'checked' : ''} ${dis}>Payé par un ouvrier</label><label><input type="radio" name="payeur" value="direct" ${payeur === 'direct' ? 'checked' : ''} ${dis}>Payé en direct</label></div>
-      <label class="f" id="fOuvrier" ${payeur === 'direct' ? 'hidden' : ''}><span>Ouvrier</span><select name="ouvrier_id" ${dis}>${ouvOptions(cur.ouvrier_id)}</select></label>
+    body = `<div class="seg" role="radiogroup" aria-label="Qui a payé ?"><label><input type="radio" name="payeur" value="ouvrier" ${payeur === 'ouvrier' ? 'checked' : ''} ${dis}>Payé par un intervenant</label><label><input type="radio" name="payeur" value="direct" ${payeur === 'direct' ? 'checked' : ''} ${dis}>Payé en direct</label></div>
+      <label class="f" id="fOuvrier" ${payeur === 'direct' ? 'hidden' : ''}><span>Intervenant</span><select name="ouvrier_id" ${dis}>${ouvOptions(cur.ouvrier_id)}</select></label>
       <div class="frow">${dateF}${montantF}</div>
       <label class="f"><span>Projet</span><select name="project_id" required ${dis}>${projOptions(cur.project_id)}</select></label>
       <label class="f"><span>Catégorie</span><select name="categorie_id" required ${dis}>${catOptions(cur.categorie_id)}</select></label>
@@ -566,7 +566,7 @@ function openForm(kind, id, override){
       ${id ? `<label class="f"><span>Statut</span><select name="statut" ${dis}>${Object.entries(STATUT).map(([k, [l]]) => `<option value="${k}" ${cur.statut === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : '<p class="muted small" style="margin:0">Une dépense saisie ici est validée directement.</p>'}
       ${cur.validee_par ? `<p class="muted small" style="margin:0">Validée par ${esc(personName(cur.validee_par))} le ${new Date(cur.validee_le).toLocaleString('fr-FR')}</p>` : ''}`;
   } else if(kind === 'ouvrier'){
-    title = id ? 'Ouvrier' : 'Nouvel ouvrier';
+    title = id ? 'Intervenant' : 'Nouvel intervenant';
     body = `<label class="f"><span>Nom</span><input type="text" name="nom" required value="${esc(cur.nom || '')}" ${dis}></label>
       <label class="f"><span>Téléphone WhatsApp</span><input type="tel" name="telephone" placeholder="+212612345678 ou 0612345678" value="${esc(cur.telephone || '')}" ${dis}></label>
       <label class="f"><span><input type="checkbox" name="actif" ${cur.actif !== false ? 'checked' : ''} ${dis}> Actif</span></label>
@@ -594,12 +594,12 @@ function openForm(kind, id, override){
       if(!(row.montant > 0)){ err.textContent = 'Indique un montant supérieur à 0.'; return; }
     }
     if(kind === 'alim'){ row.origine = g('origine'); row.note = g('note'); }
-    if(kind === 'avance'){ row.ouvrier_id = g('ouvrier_id'); row.project_id = g('project_id') || null; row.note = g('note'); if(!row.ouvrier_id){ err.textContent = 'Choisis l’ouvrier.'; return; } }
+    if(kind === 'avance'){ row.ouvrier_id = g('ouvrier_id'); row.project_id = g('project_id') || null; row.note = g('note'); if(!row.ouvrier_id){ err.textContent = 'Choisis l’intervenant.'; return; } }
     if(kind === 'depense'){
       row.payeur = g('payeur') || 'ouvrier'; row.ouvrier_id = row.payeur === 'ouvrier' ? (g('ouvrier_id') || null) : null;
       row.project_id = g('project_id') || null; row.categorie_id = g('categorie_id') || null; row.libelle = g('libelle');
       row.statut = id ? g('statut') : 'validee';
-      if(row.payeur === 'ouvrier' && !row.ouvrier_id){ err.textContent = 'Choisis l’ouvrier qui a payé.'; return; }
+      if(row.payeur === 'ouvrier' && !row.ouvrier_id){ err.textContent = 'Choisis l’intervenant qui a payé.'; return; }
       if(row.statut === 'validee' && (!row.project_id || !row.categorie_id)){ err.textContent = 'Choisis le projet et la catégorie.'; return; }
       const file = fd.get('fichier');
       if(file && file.size){
@@ -644,7 +644,7 @@ async function exportXlsx(btn){
   try {
     const X = await loadXlsx();
     const serial = iso => { const [y, m, d] = iso.split('-').map(Number); return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 864e5; };
-    const data = rows.map(r => ({'Date':serial(r.date), 'Type':r.type, 'Ouvrier':r.ouvrier ? ouvName(r.ouvrier) : '', 'Projet':r.projet ? projName(r.projet) : '',
+    const data = rows.map(r => ({'Date':serial(r.date), 'Type':r.type, 'Intervenant':r.ouvrier ? ouvName(r.ouvrier) : '', 'Projet':r.projet ? projName(r.projet) : '',
       'Catégorie':r.cat ? (catOf(r.cat) || {}).nom || '' : '', 'Libellé':r.libelle || '', 'Entrée':r.entree || null, 'Sortie':r.sortie || null, 'Statut':STATUT[r.statut][0]}));
     const ws = X.utils.json_to_sheet(data);
     for(let i = 1; i <= data.length; i++){ const c = ws[X.utils.encode_cell({r:i, c:0})]; if(c) c.z = 'dd/mm/yyyy'; ['G', 'H'].forEach(col => { const x = ws[col + (i + 1)]; if(x) x.z = '#,##0.00'; }); }
