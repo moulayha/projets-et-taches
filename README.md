@@ -9,6 +9,7 @@ L'application tient dans une seule page statique (`index.html`). Les données so
 | Fichier | Rôle |
 |---|---|
 | `index.html` | L'application |
+| `caisse.html` | Module Caisse (avances, dépenses des ouvriers, coût par projet), visible seulement par les super admins, la facturation et les personnes ajoutées dans ses Réglages |
 | `config.js` | Adresse et clé publique du projet Supabase |
 | `supabase/schema.sql` | Tables, sécurité (RLS) et temps réel |
 

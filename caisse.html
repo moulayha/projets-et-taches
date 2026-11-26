@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>WEEKLY STATUS · Caisse</title>
+<link rel="icon" href="logo-clic-events.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Module Caisse : même charte que « Projets et tâches ». Bandeau, titre, onglets, puis une vue par onglet ; les saisies se font dans une fenêtre. */
+:root{
+  --bg:#F6F8F7; --surface:#FFFFFF; --fg:#1C2321; --muted:#65706C; --line:#E0E5E3; --hover:#EDF2F0;
+  --accent:#0F6B66; --accent-fg:#FFFFFF; --accent-soft:#DDEEEC; --danger:#B3362A; --ok:#22663A; --ok-bg:#DDF0E2;
+  --warn-bg:#FBE5D2; --warn-fg:#954610; --bad-bg:#FBE0DC; --bad-fg:#992B1F; --info-bg:#DCEAF8; --info-fg:#1D5889;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --shadow:0 10px 30px rgba(20,40,36,.16);
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#131716; --surface:#1A1F1E; --fg:#E4EAE8; --muted:#93A09B; --line:#2B3331; --hover:#212827;
+  --accent:#52B9B0; --accent-fg:#06201D; --accent-soft:#1D3432; --danger:#EE8A7E; --ok:#9DD8AD; --ok-bg:#1D4027;
+  --warn-bg:#553318; --warn-fg:#F3BE90; --bad-bg:#52231E; --bad-fg:#F1ACA4; --info-bg:#1B3853; --info-fg:#9BC9EF;
+  --shadow:0 10px 30px rgba(0,0,0,.45); color-scheme:dark;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.45}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none !important}
+.cover{height:132px;background:
+  repeating-linear-gradient(90deg, color-mix(in srgb, #fff 14%, transparent) 0 1px, transparent 1px 28px),
+  repeating-linear-gradient(0deg, color-mix(in srgb, #fff 14%, transparent) 0 1px, transparent 1px 28px),
+  linear-gradient(120deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #4889C8));}
+.brandbar{max-width:1180px;margin:0 auto;height:100%;display:flex;justify-content:flex-end;padding:22px 16px 0}
+.brand{font-family:var(--display);font-weight:700;font-size:clamp(22px,3.6vw,34px);letter-spacing:.14em;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.18);line-height:1}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px 64px}
+.page-head{display:flex;flex-direction:column;gap:6px;margin-top:-34px;margin-bottom:22px}
+.page-logo{align-self:flex-start;background:#fff;border-radius:16px;box-shadow:var(--shadow);padding:10px 16px;line-height:0}
+.page-logo img{height:70px;width:auto;display:block}
+@media (max-width:560px){ .page-logo img{height:54px} }
+.titlebar{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,4.4vw,40px);letter-spacing:-.02em;margin:10px 0 0}
+.tactions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.who{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--muted);font-size:13px}
+.sync{color:var(--muted);font-size:13px;min-height:1.3em;margin:0}
+.sync.warn{color:var(--danger)}
+h2{font-family:var(--display);font-weight:700;font-size:22px;margin:0}
+h3{font-family:var(--display);font-weight:700;font-size:17px;margin:0 0 10px}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:500;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ok{background:var(--ok-bg);border-color:transparent;color:var(--ok)}
+.btn.danger{color:var(--danger);border-color:color-mix(in srgb, var(--danger) 40%, var(--line))}
+.btn.sm{padding:3px 9px;font-size:13px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.maintabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:18px}
+.maintabs button{border:0;background:none;padding:9px 14px;border-radius:8px 8px 0 0;color:var(--muted);font-weight:600;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.maintabs button:hover{background:var(--hover);color:var(--fg)}
+.maintabs button[aria-selected="true"]{color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.badge{font-family:var(--mono);font-size:11.5px;padding:0 7px;border-radius:999px;background:var(--warn-bg);color:var(--warn-fg)}
+.badge:empty{display:none}
+.head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.head .acts{display:flex;flex-wrap:wrap;gap:8px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:22px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.kpi .l{color:var(--muted);font-size:12.5px}
+.kpi .v{font-family:var(--display);font-weight:700;font-size:26px;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .s{color:var(--muted);font-size:12px}
+.neg{color:var(--danger)}
+.tscroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table.grid{border-collapse:collapse;width:100%;font-size:13.5px}
+.grid th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.grid td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+.grid tr:last-child td{border-bottom:0}
+.grid tr.row{cursor:pointer}
+.grid tr.row:hover td{background:var(--hover)}
+.grid .num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.grid tfoot td{font-weight:600;border-top:1px solid var(--line)}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+.date{white-space:nowrap;font-variant-numeric:tabular-nums}
+.pill{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:12.5px;font-weight:500;white-space:nowrap;line-height:1.6}
+.p-ok{background:var(--ok-bg);color:var(--ok)} .p-warn{background:var(--warn-bg);color:var(--warn-fg)}
+.p-bad{background:var(--bad-bg);color:var(--bad-fg)} .p-info{background:var(--info-bg);color:var(--info-fg)}
+.p-gray{background:var(--hover);color:var(--muted)}
+.empty{padding:28px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:12px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;font-size:13px}
+.filters select,.filters input{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:5px 8px}
+/* à valider */
+.cards{display:grid;gap:12px}
+.vcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;gap:10px}
+.vtop{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline}
+.vtop strong{font-size:15px}
+.vmsg{background:var(--hover);border-radius:8px;padding:8px 10px;font-size:13.5px;white-space:pre-wrap}
+.vmsg[dir="auto"]{unicode-bidi:plaintext}
+.vfields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.vfields label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
+.vfields input,.vfields select,.f input,.f select,.f textarea{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:6px 8px;color:var(--fg);font-size:14px;width:100%}
+.vacts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+/* projets */
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.pcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;gap:8px;align-content:start}
+.pcard .t{font-weight:600}
+.pcard .tot{font-family:var(--display);font-weight:700;font-size:22px;font-variant-numeric:tabular-nums}
+.bar{height:8px;border-radius:99px;background:var(--hover);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.bar i.over{background:var(--danger)}
+.cats{display:grid;gap:4px;font-size:13px}
+.cats div{display:flex;justify-content:space-between;gap:8px}
+.cats span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums}
+/* réglages */
+.sets{display:grid;gap:22px}
+.setcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.setcard p{margin:0 0 10px}
+.inline{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.inline select,.inline input{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:5px 8px}
+.chk{display:flex;flex-wrap:wrap;gap:6px 16px}
+.chk label{display:flex;gap:6px;align-items:center}
+/* fenêtre */
+dialog{border:0;border-radius:14px;padding:0;box-shadow:var(--shadow);background:var(--surface);color:var(--fg);width:min(520px,calc(100vw - 24px))}
+dialog::backdrop{background:rgba(10,20,18,.45)}
+.dlg{padding:18px 20px;display:grid;gap:12px}
+.dlg h3{margin:0}
+.f{display:grid;gap:4px}
+.f > span{font-size:12.5px;color:var(--muted)}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:480px){ .frow{grid-template-columns:1fr} }
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg label{flex:1;text-align:center;padding:6px;cursor:pointer}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--accent);color:var(--accent-fg)}
+.dacts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center}
+.dacts .sp{flex:1}
+.err{color:var(--danger);font-size:13px;min-height:1.2em;margin:0}
+.authcard{max-width:420px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;display:grid;gap:8px}
+.authcard input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px}
+.linkbtn{border:0;background:none;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<header class="cover"><div class="brandbar"><span class="brand">WEEKLY STATUS</span></div></header>
+<main class="wrap">
+  <div class="page-head">
+    <div class="page-logo"><img src="logo-clic-events.png" alt="CLIC Events — Communication & Événementiel" width="640" height="283"></div>
+    <div class="titlebar"><h1>Caisse</h1>
+      <div class="tactions">
+        <a class="btn" href="./">← Projets et tâches</a>
+        <span class="who" id="who" hidden><span id="whoEmail"></span><span class="pill p-gray" id="whoLevel"></span><button class="btn" id="logout" type="button">Déconnexion</button></span>
+      </div>
+    </div>
+    <p class="sync" id="sync" role="status">Chargement…</p>
+  </div>
+
+  <div id="auth" hidden></div>
+
+  <div id="app" hidden>
+    <nav class="maintabs" id="tabs" role="tablist" aria-label="Sections de la caisse">
+      <button type="button" role="tab" data-tab="valider">À valider <span class="badge" id="nbValider"></span></button>
+      <button type="button" role="tab" data-tab="bord">Tableau de bord</button>
+      <button type="button" role="tab" data-tab="mvt">Mouvements</button>
+      <button type="button" role="tab" data-tab="projets">Projets</button>
+      <button type="button" role="tab" data-tab="ouvriers">Ouvriers</button>
+      <button type="button" role="tab" data-tab="reglages" id="tabReglages" hidden>Réglages</button>
+    </nav>
+    <section id="view" role="tabpanel"></section>
+  </div>
+</main>
+
+<dialog id="dlg"><form method="dialog" class="dlg" id="dlgForm" novalidate></form></dialog>
+
+<script>
+(function(){
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtMoney = new Intl.NumberFormat('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2});
+const dh = v => fmtMoney.format(Number(v) || 0).replace(/ | /g, ' ') + ' DH';
+const todayISO = () => new Intl.DateTimeFormat('en-CA', {timeZone:'Africa/Casablanca'}).format(new Date());
+const fmtDate = d => d ? d.split('-').reverse().join('/') : '';
+const monthStart = () => todayISO().slice(0, 8) + '01';
+const LS = {
+  get(k, d){ try { return localStorage.getItem(k) ?? d; } catch(e){ return d; } },
+  set(k, v){ try { localStorage.setItem(k, v); } catch(e){} },
+};
+
+const S = {
+  sb:null, level:null, me:null, tab:LS.get('caisse.tab', 'bord'),
+  projets:new Map(), actifs:[], ouvriers:[], categories:[], alims:[], avances:[], depenses:[], messages:new Map(),
+  soldes:[], principal:null, reglages:{}, people:new Map(), pstat:[], acces:[], users:[],
+  f:{du:monthStart(), au:'', type:'', projet:'', ouvrier:'', cat:'', statut:''},
+};
+const canWrite = () => S.level === 'super' || S.level === 'gestionnaire';
+const isSuper = () => S.level === 'super';
+const LEVEL_LABEL = {super:'Super admin', gestionnaire:'Gestion caisse', lecture:'Lecture seule'};
+
+function setSync(msg, warn){ const el = $('#sync'); el.textContent = msg || ''; el.classList.toggle('warn', !!warn); }
+function friendly(err){
+  const m = (err && (err.message || err.error_description)) || String(err || '');
+  if(/pas actif pour la caisse/i.test(m)) return 'Ce projet n’est pas actif : choisis un projet validé, en exploitation ou en facturation.';
+  if(/caisse_depenses_validee_ck/.test(m)) return 'Pour valider, il faut un montant, un projet et une catégorie.';
+  if(/caisse_depenses_payeur_ck/.test(m)) return 'Choisis l’ouvrier qui a payé, ou « Payé en direct ».';
+  if(/telephone/.test(m) && /check/i.test(m)) return 'Numéro invalide : écris-le au format international, par exemple +212612345678.';
+  if(/duplicate key/i.test(m) && /telephone/.test(m)) return 'Ce numéro est déjà utilisé par un autre ouvrier.';
+  if(/duplicate key/i.test(m) && /nom_court/.test(m)) return 'Ce nom court est déjà utilisé par un autre projet.';
+  if(/foreign key|violates.*restrict/i.test(m)) return 'Impossible : des mouvements sont encore liés à cet élément.';
+  if(/row-level security|permission denied|42501/i.test(m)) return 'Action non autorisée avec ton niveau d’accès.';
+  return 'Erreur : ' + m;
+}
+const projName = id => id ? ((S.projets.get(id) || {}).name || 'Projet supprimé') : '—';
+const ouvName = id => id ? ((S.ouvriers.find(o => o.id === id) || {}).nom || 'Ouvrier supprimé') : '—';
+const catOf = id => S.categories.find(c => c.id === id);
+const catName = id => { const c = catOf(id); return c ? `${c.icone ? c.icone + ' ' : ''}${c.nom}` : '—'; };
+const personName = id => id ? ((S.people.get(id) || {}).name || '') : '';
+
+/* ---------- chargement ---------- */
+async function q(p){ const r = await p; if(r.error) throw r.error; return r.data; }
+async function loadAll(){
+  const sb = S.sb;
+  const [actifs, projets, ouvriers, cats, alims, avances, depenses, soldes, principal, regl, people, settings] = await Promise.all([
+    q(sb.from('caisse_projets_actifs').select('*').order('name')),
+    q(sb.from('projects').select('id,name,code,status,client')),
+    q(sb.from('caisse_ouvriers').select('*').order('nom')),
+    q(sb.from('caisse_categories').select('*').order('ordre')),
+    q(sb.from('caisse_alimentations').select('*').order('date_op', {ascending:false}).order('created_at', {ascending:false})),
+    q(sb.from('caisse_avances').select('*').order('date_op', {ascending:false}).order('created_at', {ascending:false})),
+    q(sb.from('caisse_depenses').select('*').order('date_op', {ascending:false}).order('created_at', {ascending:false})),
+    q(sb.from('caisse_soldes_ouvriers').select('*')),
+    q(sb.from('caisse_solde_principal').select('*').maybeSingle()),
+    q(sb.from('caisse_reglages').select('*').eq('id', 'options').maybeSingle()),
+    q(sb.from('people').select('id,name')),
+    q(sb.from('settings').select('data').eq('id', 'options').maybeSingle()),
+  ]);
+  S.actifs = actifs; S.projets = new Map(projets.map(p => [p.id, p])); S.ouvriers = ouvriers; S.categories = cats;
+  S.alims = alims; S.avances = avances; S.depenses = depenses; S.soldes = soldes; S.principal = principal;
+  S.reglages = (regl && regl.data) || {}; S.people = new Map(people.map(p => [p.id, p]));
+  S.pstat = ((settings && settings.data && settings.data.pstat) || []).map(x => x.n).filter(Boolean);
+  const msgIds = [...new Set(depenses.filter(d => d.statut === 'a_valider' && d.message_id).map(d => d.message_id))];
+  S.messages = new Map();
+  if(msgIds.length){ (await q(sb.from('caisse_messages').select('*').in('id', msgIds))).forEach(m => S.messages.set(m.id, m)); }
+  if(isSuper()){
+    S.acces = await q(sb.from('caisse_acces').select('*'));
+    S.users = await q(sb.from('app_users').select('id,role'));
+  }
+}
+let reloadTimer = null;
+function scheduleReload(){ clearTimeout(reloadTimer); reloadTimer = setTimeout(refresh, 400); }
+async function refresh(){
+  try { await loadAll(); render(); setSync(''); }
+  catch(e){ setSync('Les données de la caisse n’ont pas pu être chargées. ' + friendly(e), true); }
+}
+
+/* ---------- rendu ---------- */
+function render(){
+  const nb = S.depenses.filter(d => d.statut === 'a_valider').length;
+  $('#nbValider').textContent = nb ? String(nb) : '';
+  document.querySelectorAll('#tabs [data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === S.tab)));
+  const v = $('#view');
+  const fn = {valider:viewValider, bord:viewBord, mvt:viewMvt, projets:viewProjets, ouvriers:viewOuvriers, reglages:viewReglages}[S.tab] || viewBord;
+  v.innerHTML = fn();
+  bindView();
+}
+const addButtons = () => canWrite() ? `<div class="acts">
+  <button class="btn" type="button" data-new="alim">+ Alimentation caisse</button>
+  <button class="btn" type="button" data-new="avance">+ Avance ouvrier</button>
+  <button class="btn primary" type="button" data-new="depense">+ Dépense</button></div>` : '';
+
+function viewBord(){
+  const p = S.principal || {alimentations:0, avances:0, depenses_directes:0, solde:0};
+  const chezOuvriers = S.soldes.reduce((a, s) => a + Math.max(0, Number(s.solde) || 0), 0);
+  const dus = S.soldes.reduce((a, s) => a + Math.max(0, -(Number(s.solde) || 0)), 0);
+  const m0 = monthStart();
+  const moisDep = S.depenses.filter(d => d.statut === 'validee' && d.date_op >= m0).reduce((a, d) => a + Number(d.montant || 0), 0);
+  const nbVal = S.depenses.filter(d => d.statut === 'a_valider').length;
+  const rows = S.soldes.filter(s => s.actif || Number(s.avances) || Number(s.depenses)).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+  return `<div class="head"><h2>Tableau de bord</h2>${addButtons()}</div>
+  <div class="kpis">
+    <div class="kpi"><div class="l">Caisse principale</div><div class="v ${Number(p.solde) < 0 ? 'neg' : ''}">${dh(p.solde)}</div>
+      <div class="s">Alimentations ${dh(p.alimentations)} − avances ${dh(p.avances)} − paiements directs ${dh(p.depenses_directes)}</div></div>
+    <div class="kpi"><div class="l">Argent chez les ouvriers</div><div class="v">${dh(chezOuvriers)}</div>
+      <div class="s">${dus ? `La société doit ${dh(dus)} aux ouvriers en négatif` : 'Aucun ouvrier en négatif'}</div></div>
+    <div class="kpi"><div class="l">Dépenses validées ce mois</div><div class="v">${dh(moisDep)}</div><div class="s">depuis le ${fmtDate(m0)}</div></div>
+    <div class="kpi"><div class="l">À valider</div><div class="v">${nbVal}</div><div class="s">${nbVal ? '<button class="linkbtn" type="button" data-goto="valider">Ouvrir la file</button>' : 'Rien en attente'}</div></div>
+  </div>
+  <h3>Solde par ouvrier</h3>
+  ${rows.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Ouvrier</th><th class="num">Avances reçues</th><th class="num">Dépenses validées</th><th class="num">Solde en main</th><th class="num">À valider</th></tr></thead><tbody>
+    ${rows.map(s => `<tr class="row" data-ouvrier="${esc(s.ouvrier_id)}"><td>${esc(s.nom)}${s.actif ? '' : ' <span class="pill p-gray">inactif</span>'}</td><td class="num">${dh(s.avances)}</td><td class="num">${dh(s.depenses)}</td>
+      <td class="num ${Number(s.solde) < 0 ? 'neg' : ''}">${dh(s.solde)}</td><td class="num">${s.nb_a_valider ? `<span class="pill p-warn">${s.nb_a_valider}</span>` : ''}</td></tr>`).join('')}
+  </tbody></table></div><p class="muted small">Un solde négatif veut dire que l’ouvrier a avancé de son argent : la société le lui doit.</p>`
+  : `<div class="empty">Aucun ouvrier pour le moment.${isSuper() ? ' Ajoute-les dans l’onglet <button class="linkbtn" type="button" data-goto="ouvriers">Ouvriers</button>.' : ''}</div>`}`;
+}
+
+function projOptions(selected, opts = {}){
+  const list = [...S.actifs];
+  if(selected && !list.some(p => p.id === selected) && S.projets.has(selected)) list.unshift({...S.projets.get(selected), inactive:true});
+  return `<option value="">${opts.empty || '— Projet —'}</option>` + list.map(p =>
+    `<option value="${esc(p.id)}" ${p.id === selected ? 'selected' : ''}>${esc(p.name || 'Sans titre')}${p.inactive ? ' (plus actif)' : ''}</option>`).join('');
+}
+const catOptions = (selected) => `<option value="">— Catégorie —</option>` + S.categories.filter(c => c.actif || c.id === selected).map(c =>
+  `<option value="${esc(c.id)}" ${c.id === selected ? 'selected' : ''}>${esc((c.icone ? c.icone + ' ' : '') + c.nom)}</option>`).join('');
+const ouvOptions = (selected, empty) => `<option value="">${empty || '— Ouvrier —'}</option>` + S.ouvriers.filter(o => o.actif || o.id === selected).map(o =>
+  `<option value="${esc(o.id)}" ${o.id === selected ? 'selected' : ''}>${esc(o.nom)}</option>`).join('');
+
+function viewValider(){
+  const list = S.depenses.filter(d => d.statut === 'a_valider').sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+  const head = `<div class="head"><h2>À valider <span class="muted small">${list.length}</span></h2>${canWrite() && list.length > 1 ? '<div class="acts"><button class="btn ok" type="button" id="validAll">Valider toutes les lignes complètes</button></div>' : ''}</div>`;
+  if(!list.length) return head + '<div class="empty">Rien à valider. Les dépenses envoyées par WhatsApp arriveront ici.</div>';
+  const ro = canWrite() ? '' : 'disabled';
+  return head + '<div class="cards">' + list.map(d => {
+    const m = d.message_id ? S.messages.get(d.message_id) : null;
+    const src = {whatsapp_texte:'WhatsApp texte', whatsapp_vocal:'WhatsApp vocal', whatsapp_photo:'WhatsApp photo', saisie:'Saisie', import:'Import'}[d.source] || d.source;
+    return `<article class="vcard" data-id="${esc(d.id)}">
+      <div class="vtop"><strong>${esc(d.payeur === 'direct' ? 'Payé en direct' : ouvName(d.ouvrier_id))}</strong><span class="date muted">${fmtDate(d.date_op)}</span><span class="pill p-info">${esc(src)}</span>
+        ${d.justificatif ? `<button class="linkbtn small" type="button" data-justif="${esc(d.justificatif)}">Voir le justificatif</button>` : ''}</div>
+      ${m && m.texte ? `<div class="vmsg" dir="auto">${esc(m.texte)}</div>` : (d.libelle ? `<div class="vmsg" dir="auto">${esc(d.libelle)}</div>` : '')}
+      <div class="vfields">
+        <label>Montant (DH)<input type="number" min="0.01" step="0.01" inputmode="decimal" data-k="montant" value="${d.montant ?? ''}" ${ro}></label>
+        <label>Projet<select data-k="project_id" ${ro}>${projOptions(d.project_id)}</select></label>
+        <label>Catégorie<select data-k="categorie_id" ${ro}>${catOptions(d.categorie_id)}</select></label>
+        <label>Libellé<input type="text" data-k="libelle" value="${esc(d.libelle)}" dir="auto" ${ro}></label>
+      </div>
+      ${canWrite() ? `<div class="vacts"><button class="btn danger sm" type="button" data-act="rejeter">Rejeter</button><button class="btn sm" type="button" data-act="edit">Plus de détails</button><button class="btn primary sm" type="button" data-act="valider">Valider</button></div>` : ''}
+    </article>`;
+  }).join('') + '</div>';
+}
+
+function movements(){
+  const rows = [];
+  S.alims.forEach(a => rows.push({k:'alim', id:a.id, date:a.date_op, created:a.created_at, type:'Alimentation', ouvrier:'', projet:'', cat:'', libelle:[a.origine, a.note].filter(Boolean).join(' · '), entree:Number(a.montant), sortie:0, statut:'validee', raw:a}));
+  S.avances.forEach(a => rows.push({k:'avance', id:a.id, date:a.date_op, created:a.created_at, type:'Avance', ouvrier:a.ouvrier_id, projet:a.project_id || '', cat:'', libelle:a.note, entree:0, sortie:Number(a.montant), statut:'validee', raw:a}));
+  S.depenses.forEach(d => rows.push({k:'depense', id:d.id, date:d.date_op, created:d.created_at, type:d.payeur === 'direct' ? 'Paiement direct' : 'Dépense ouvrier', ouvrier:d.ouvrier_id || '', projet:d.project_id || '', cat:d.categorie_id || '', libelle:d.libelle, entree:0, sortie:Number(d.montant || 0), statut:d.statut, raw:d}));
+  return rows.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created || '').localeCompare(a.created || ''));
+}
+function filteredMovements(){
+  const f = S.f;
+  return movements().filter(r => (!f.du || r.date >= f.du) && (!f.au || r.date <= f.au) && (!f.type || r.k === f.type)
+    && (!f.projet || r.projet === f.projet) && (!f.ouvrier || r.ouvrier === f.ouvrier) && (!f.cat || r.cat === f.cat) && (!f.statut || r.statut === f.statut));
+}
+const STATUT = {validee:['Validée', 'p-ok'], a_valider:['À valider', 'p-warn'], rejetee:['Rejetée', 'p-bad']};
+function viewMvt(){
+  const rows = filteredMovements(), f = S.f;
+  const usedProj = [...new Set(movements().map(r => r.projet).filter(Boolean))].map(id => ({id, name:projName(id)})).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  const tot = rows.filter(r => r.statut === 'validee').reduce((a, r) => ({e:a.e + r.entree, s:a.s + (r.k === 'depense' ? r.sortie : 0), v:a.v + (r.k === 'avance' ? r.sortie : 0)}), {e:0, s:0, v:0});
+  return `<div class="head"><h2>Mouvements <span class="muted small">${rows.length}</span></h2><div class="acts"><button class="btn" type="button" id="exportXlsx">Exporter Excel</button>${canWrite() ? '<button class="btn primary" type="button" data-new="depense">+ Dépense</button>' : ''}</div></div>
+  <div class="filters" id="filters">
+    <label>Du <input type="date" data-f="du" value="${esc(f.du)}"></label><label>au <input type="date" data-f="au" value="${esc(f.au)}"></label>
+    <select data-f="type" aria-label="Type"><option value="">Tous les types</option>${[['alim', 'Alimentations'], ['avance', 'Avances'], ['depense', 'Dépenses']].map(([k, l]) => `<option value="${k}" ${f.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <select data-f="projet" aria-label="Projet"><option value="">Tous les projets</option>${usedProj.map(p => `<option value="${esc(p.id)}" ${f.projet === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+    <select data-f="ouvrier" aria-label="Ouvrier">${ouvOptions(f.ouvrier, 'Tous les ouvriers')}</select>
+    <select data-f="cat" aria-label="Catégorie"><option value="">Toutes les catégories</option>${S.categories.map(c => `<option value="${esc(c.id)}" ${f.cat === c.id ? 'selected' : ''}>${esc(c.nom)}</option>`).join('')}</select>
+    <select data-f="statut" aria-label="Statut"><option value="">Tous les statuts</option>${Object.entries(STATUT).map(([k, [l]]) => `<option value="${k}" ${f.statut === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <button class="btn sm" type="button" id="resetF">Effacer les filtres</button>
+  </div>
+  ${rows.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Date</th><th>Type</th><th>Ouvrier</th><th>Projet</th><th>Catégorie</th><th>Libellé</th><th class="num">Entrée</th><th class="num">Sortie</th><th>Statut</th></tr></thead><tbody>
+  ${rows.map(r => `<tr class="row" data-edit="${r.k}:${esc(r.id)}"><td class="date">${fmtDate(r.date)}</td><td>${esc(r.type)}</td><td>${r.ouvrier ? esc(ouvName(r.ouvrier)) : '<span class="muted">—</span>'}</td>
+    <td>${r.projet ? esc(projName(r.projet)) : '<span class="muted">—</span>'}</td><td>${r.cat ? esc(catName(r.cat)) : '<span class="muted">—</span>'}</td><td dir="auto">${esc(r.libelle || '')}${r.raw.justificatif ? ' 📎' : ''}</td>
+    <td class="num">${r.entree ? dh(r.entree) : ''}</td><td class="num">${r.sortie ? dh(r.sortie) : ''}</td><td><span class="pill ${STATUT[r.statut][1]}">${STATUT[r.statut][0]}</span></td></tr>`).join('')}
+  </tbody><tfoot><tr><td colspan="6">Total validé : alimentations ${dh(tot.e)} · avances ${dh(tot.v)} · dépenses ${dh(tot.s)}</td><td class="num">${dh(tot.e)}</td><td class="num">${dh(tot.s + tot.v)}</td><td></td></tr></tfoot></table></div>`
+  : '<div class="empty">Aucun mouvement pour ces filtres.</div>'}`;
+}
+
+function viewProjets(){
+  const by = new Map();
+  const get = id => { if(!by.has(id)) by.set(id, {id, dep:0, av:0, cats:new Map(), nb:0}); return by.get(id); };
+  S.actifs.forEach(p => get(p.id));
+  S.depenses.filter(d => d.statut === 'validee' && d.project_id).forEach(d => { const x = get(d.project_id); x.dep += Number(d.montant); x.nb++; x.cats.set(d.categorie_id, (x.cats.get(d.categorie_id) || 0) + Number(d.montant)); });
+  S.avances.filter(a => a.project_id).forEach(a => { get(a.project_id).av += Number(a.montant); });
+  const actifIds = new Set(S.actifs.map(p => p.id));
+  const list = [...by.values()].sort((a, b) => (actifIds.has(b.id) - actifIds.has(a.id)) || b.dep - a.dep || projName(a.id).localeCompare(projName(b.id), 'fr'));
+  if(!list.length) return '<div class="head"><h2>Projets</h2></div><div class="empty">Aucun projet actif.</div>';
+  return `<div class="head"><h2>Coût par projet</h2></div><p class="muted small" style="margin-top:-6px">Dépenses validées, payées par un ouvrier ou en direct. Projets actifs : état « ${esc((S.reglages.statuts_actifs || []).join(' », « '))} ».</p><div class="pgrid">` + list.map(x => {
+    const p = S.projets.get(x.id) || {}, a = S.actifs.find(y => y.id === x.id) || {}, budget = a.budget != null ? Number(a.budget) : null;
+    const pct = budget ? Math.min(100, x.dep / budget * 100) : 0;
+    const cats = [...x.cats.entries()].sort((m, n) => n[1] - m[1]);
+    return `<article class="pcard"><div class="t">${esc(p.name || 'Projet supprimé')}</div>
+      <div class="muted small">${esc([p.code, p.client].filter(Boolean).join(' · '))} ${actifIds.has(x.id) ? '' : '<span class="pill p-gray">plus actif</span>'}</div>
+      <div class="tot">${dh(x.dep)}</div>
+      ${budget ? `<div class="bar" title="${Math.round(x.dep / budget * 100)} % du budget"><i class="${x.dep > budget ? 'over' : ''}" style="width:${pct}%"></i></div><div class="small ${x.dep > budget ? 'neg' : 'muted'}">Budget ${dh(budget)} · ${x.dep > budget ? 'dépassé de ' + dh(x.dep - budget) : 'reste ' + dh(budget - x.dep)}</div>` : ''}
+      <div class="small muted">${x.nb} dépense${x.nb > 1 ? 's' : ''} validée${x.nb > 1 ? 's' : ''} · avances données ${dh(x.av)}</div>
+      ${cats.length ? `<div class="cats">${cats.map(([c, v]) => `<div><span>${esc(catName(c))}</span><span>${dh(v)}</span></div>`).join('')}</div>` : ''}
+      <div><button class="btn sm" type="button" data-projmvt="${esc(x.id)}">Voir les mouvements</button></div></article>`;
+  }).join('') + '</div>';
+}
+
+function viewOuvriers(){
+  const so = new Map(S.soldes.map(s => [s.ouvrier_id, s]));
+  return `<div class="head"><h2>Ouvriers <span class="muted small">${S.ouvriers.length}</span></h2>${isSuper() ? '<div class="acts"><button class="btn primary" type="button" data-new="ouvrier">+ Ouvrier</button></div>' : ''}</div>
+  ${S.ouvriers.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Nom</th><th>Téléphone WhatsApp</th><th>État</th><th class="num">Solde en main</th><th>Note</th></tr></thead><tbody>
+  ${S.ouvriers.map(o => { const s = so.get(o.id) || {}; return `<tr class="${isSuper() ? 'row' : ''}" ${isSuper() ? `data-edit="ouvrier:${esc(o.id)}"` : ''}><td>${esc(o.nom)}</td><td class="mono">${esc(o.telephone || '—')}</td>
+    <td>${o.actif ? '<span class="pill p-ok">Actif</span>' : '<span class="pill p-gray">Inactif</span>'}</td><td class="num ${Number(s.solde) < 0 ? 'neg' : ''}">${dh(s.solde)}</td><td class="muted">${esc(o.note)}</td></tr>`; }).join('')}
+  </tbody></table></div><p class="muted small">Le bot WhatsApp ne reconnaît que les numéros enregistrés ici, au format international (+212…).${isSuper() ? '' : ' Seul un super admin peut ajouter ou modifier un ouvrier.'}</p>`
+  : `<div class="empty">Aucun ouvrier enregistré.${isSuper() ? ' Ajoute ton équipe avec « + Ouvrier ».' : ''}</div>`}`;
+}
+
+function viewReglages(){
+  if(!isSuper()) return '<div class="empty">Réglages réservés aux super admins.</div>';
+  const roleOf = id => (S.users.find(u => u.id === id) || {}).role;
+  const auto = S.users.filter(u => u.role === 'superadmin' || u.role === 'billing').map(u => `${personName(u.id)} (${u.role === 'superadmin' ? 'super admin' : 'facturation'})`);
+  const candidates = S.users.filter(u => ['member', 'viewer'].includes(u.role) && !S.acces.some(a => a.person_id === u.id)).map(u => ({id:u.id, name:personName(u.id) || u.id})).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  const actifs = new Set(S.reglages.statuts_actifs || []);
+  const statuts = [...new Set([...S.pstat, ...actifs])];
+  return `<div class="head"><h2>Réglages</h2></div><div class="sets">
+  <div class="setcard"><h3>Accès à la caisse</h3>
+    <p class="muted small">Accès automatique : ${esc(auto.join(', ') || '—')}. Les administrateurs n’ont jamais accès à la caisse.</p>
+    ${S.acces.length ? `<div class="tscroll" style="margin-bottom:10px"><table class="grid"><thead><tr><th>Personne</th><th>Rôle projets</th><th>Niveau caisse</th><th></th></tr></thead><tbody>
+      ${S.acces.map(a => `<tr><td>${esc(personName(a.person_id) || a.person_id)}</td><td class="muted">${esc(roleOf(a.person_id) || 'sans compte')}</td>
+        <td><select data-acces-niveau="${esc(a.person_id)}"><option value="gestionnaire" ${a.niveau === 'gestionnaire' ? 'selected' : ''}>Gestion (voit, saisit, valide)</option><option value="lecture" ${a.niveau === 'lecture' ? 'selected' : ''}>Lecture seule</option></select></td>
+        <td><button class="btn danger sm" type="button" data-acces-del="${esc(a.person_id)}">Retirer</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Personne d’autre n’a accès pour le moment.</p>'}
+    <div class="inline"><select id="accesPerson" aria-label="Personne"><option value="">— Choisir une personne —</option>${candidates.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select>
+      <select id="accesNiveau" aria-label="Niveau"><option value="gestionnaire">Gestion</option><option value="lecture">Lecture seule</option></select><button class="btn primary" type="button" id="accesAdd">Donner l’accès</button></div></div>
+
+  <div class="setcard"><h3>Projets actifs pour la caisse</h3><p class="muted small">Seuls les projets dans ces états sont proposés pour une nouvelle avance ou dépense.</p>
+    <div class="chk" id="statuts">${statuts.map(s => `<label><input type="checkbox" value="${esc(s)}" ${actifs.has(s) ? 'checked' : ''}> ${esc(s)}</label>`).join('')}</div>
+    <div style="margin-top:10px"><button class="btn primary" type="button" id="saveStatuts">Enregistrer</button></div></div>
+
+  <div class="setcard"><h3>Numéro WhatsApp du bot</h3><p class="muted small">Le numéro dédié sur lequel les ouvriers enverront leurs dépenses (étape WhatsApp).</p>
+    <div class="inline"><input type="tel" id="waNum" placeholder="+212612345678" value="${esc(S.reglages.whatsapp || '')}" aria-label="Numéro WhatsApp"><button class="btn primary" type="button" id="saveWa">Enregistrer</button></div></div>
+
+  <div class="setcard"><h3>Projets : nom court et budget</h3><p class="muted small">Le nom court aide le bot à reconnaître le projet dans un message (ex. « botola »). Le budget est optionnel.</p>
+    ${S.actifs.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Projet</th><th>Nom court WhatsApp</th><th>Budget (DH)</th><th></th></tr></thead><tbody>
+    ${S.actifs.map(p => `<tr data-pr="${esc(p.id)}"><td>${esc(p.name)}<div class="muted small">${esc(p.status)}</div></td><td><input type="text" data-k="nom_court" value="${esc(p.nom_court || '')}" dir="auto"></td>
+      <td><input type="number" min="0" step="0.01" data-k="budget" value="${p.budget ?? ''}"></td><td><button class="btn sm" type="button" data-save-pr>Enregistrer</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Aucun projet actif.</p>'}</div>
+
+  <div class="setcard"><h3>Catégories</h3><p class="muted small">Les mots-clés (séparés par des virgules) aident le bot à classer les dépenses.</p>
+    <div class="tscroll"><table class="grid"><thead><tr><th>Icône</th><th>Nom</th><th>Mots-clés</th><th>Active</th><th></th></tr></thead><tbody>
+    ${S.categories.map(c => `<tr data-cat="${esc(c.id)}"><td><input type="text" data-k="icone" value="${esc(c.icone)}" style="width:52px"></td><td><input type="text" data-k="nom" value="${esc(c.nom)}"></td>
+      <td><input type="text" data-k="mots_cles" value="${esc((c.mots_cles || []).join(', '))}" dir="auto"></td><td><input type="checkbox" data-k="actif" ${c.actif ? 'checked' : ''} aria-label="Active"></td>
+      <td><button class="btn sm" type="button" data-save-cat>Enregistrer</button></td></tr>`).join('')}
+    <tr data-cat=""><td><input type="text" data-k="icone" placeholder="🔧" style="width:52px"></td><td><input type="text" data-k="nom" placeholder="Nouvelle catégorie"></td><td><input type="text" data-k="mots_cles" placeholder="mot1, mot2" dir="auto"></td><td><input type="checkbox" data-k="actif" checked aria-label="Active"></td><td><button class="btn sm primary" type="button" data-save-cat>Ajouter</button></td></tr>
+    </tbody></table></div></div>
+  </div>`;
+}
+
+/* ---------- actions ---------- */
+async function run(p, okMsg){
+  const r = await p;
+  if(r.error){ setSync(friendly(r.error), true); return false; }
+  if(okMsg) setSync(okMsg);
+  await refresh(); if(okMsg) setSync(okMsg);
+  return true;
+}
+function bindView(){
+  const v = $('#view');
+  v.onclick = async e => {
+    const t = e.target;
+    const go = t.closest('[data-goto]'); if(go){ setTab(go.dataset.goto); return; }
+    const nw = t.closest('[data-new]'); if(nw){ openForm(nw.dataset.new); return; }
+    const j = t.closest('[data-justif]'); if(j){ openJustif(j.dataset.justif); return; }
+    const pm = t.closest('[data-projmvt]'); if(pm){ S.f = {...S.f, projet:pm.dataset.projmvt, du:'', au:''}; setTab('mvt'); return; }
+    const ov = t.closest('tr[data-ouvrier]'); if(ov){ S.f = {...S.f, ouvrier:ov.dataset.ouvrier, du:'', au:''}; setTab('mvt'); return; }
+    const ed = t.closest('[data-edit]'); if(ed){ const [k, id] = ed.dataset.edit.split(':'); openForm(k, id); return; }
+    const act = t.closest('[data-act]');
+    if(act){
+      const card = act.closest('.vcard'), id = card.dataset.id, d = S.depenses.find(x => x.id === id); if(!d) return;
+      const vals = {}; card.querySelectorAll('[data-k]').forEach(i => { vals[i.dataset.k] = i.value; });
+      const patch = {montant:vals.montant ? Number(vals.montant) : null, project_id:vals.project_id || null, categorie_id:vals.categorie_id || null, libelle:vals.libelle || ''};
+      if(act.dataset.act === 'edit'){ openForm('depense', id, patch); return; }
+      if(act.dataset.act === 'valider'){
+        if(!(patch.montant > 0) || !patch.project_id || !patch.categorie_id){ setSync('Pour valider, il faut un montant, un projet et une catégorie.', true); return; }
+        act.disabled = true; await run(S.sb.from('caisse_depenses').update({...patch, statut:'validee'}).eq('id', id), 'Dépense validée.');
+      }
+      if(act.dataset.act === 'rejeter'){
+        if(!confirm('Rejeter cette dépense ? Elle ne comptera ni dans le solde de l’ouvrier ni dans le coût du projet.')) return;
+        act.disabled = true; await run(S.sb.from('caisse_depenses').update({...patch, statut:'rejetee'}).eq('id', id), 'Dépense rejetée.');
+      }
+      return;
+    }
+    if(t.id === 'validAll'){
+      const cards = [...v.querySelectorAll('.vcard')].map(card => { const vals = {}; card.querySelectorAll('[data-k]').forEach(i => { vals[i.dataset.k] = i.value; }); return {id:card.dataset.id, vals}; })
+        .filter(x => Number(x.vals.montant) > 0 && x.vals.project_id && x.vals.categorie_id);
+      if(!cards.length){ setSync('Aucune ligne complète : il faut un montant, un projet et une catégorie.', true); return; }
+      if(!confirm(`Valider ${cards.length} dépense${cards.length > 1 ? 's' : ''} ?`)) return;
+      t.disabled = true; let ko = 0;
+      for(const c of cards){ const r = await S.sb.from('caisse_depenses').update({montant:Number(c.vals.montant), project_id:c.vals.project_id, categorie_id:c.vals.categorie_id, libelle:c.vals.libelle || '', statut:'validee'}).eq('id', c.id); if(r.error) ko++; }
+      await refresh(); setSync(ko ? `${cards.length - ko} validée(s), ${ko} en erreur.` : `${cards.length} dépense(s) validée(s).`, !!ko); return;
+    }
+    if(t.id === 'resetF'){ S.f = {du:'', au:'', type:'', projet:'', ouvrier:'', cat:'', statut:''}; render(); return; }
+    if(t.id === 'exportXlsx'){ exportXlsx(t); return; }
+    // réglages
+    if(t.id === 'accesAdd'){
+      const pid = $('#accesPerson').value; if(!pid){ setSync('Choisis une personne.', true); return; }
+      await run(S.sb.from('caisse_acces').insert({person_id:pid, niveau:$('#accesNiveau').value}), 'Accès donné.'); return;
+    }
+    if(t.dataset.accesDel){
+      if(!confirm(`Retirer l’accès caisse de ${personName(t.dataset.accesDel)} ?`)) return;
+      await run(S.sb.from('caisse_acces').delete().eq('person_id', t.dataset.accesDel), 'Accès retiré.'); return;
+    }
+    if(t.id === 'saveStatuts'){
+      const vals = [...v.querySelectorAll('#statuts input:checked')].map(i => i.value);
+      if(!vals.length){ setSync('Coche au moins un état.', true); return; }
+      await run(S.sb.from('caisse_reglages').update({data:{...S.reglages, statuts_actifs:vals}}).eq('id', 'options'), 'États actifs enregistrés.'); return;
+    }
+    if(t.id === 'saveWa'){
+      const n = normPhone($('#waNum').value);
+      if($('#waNum').value.trim() && !n){ setSync('Numéro invalide : écris-le au format international, par exemple +212612345678.', true); return; }
+      await run(S.sb.from('caisse_reglages').update({data:{...S.reglages, whatsapp:n || null}}).eq('id', 'options'), 'Numéro WhatsApp enregistré.'); return;
+    }
+    if(t.hasAttribute('data-save-pr')){
+      const tr = t.closest('tr'), nc = tr.querySelector('[data-k="nom_court"]').value.trim(), b = tr.querySelector('[data-k="budget"]').value;
+      await run(S.sb.from('caisse_projets_reglages').upsert({project_id:tr.dataset.pr, nom_court:nc || null, budget:b === '' ? null : Number(b)}), 'Projet enregistré.'); return;
+    }
+    if(t.hasAttribute('data-save-cat')){
+      const tr = t.closest('tr'), g = k => tr.querySelector(`[data-k="${k}"]`);
+      const row = {icone:g('icone').value.trim(), nom:g('nom').value.trim(), mots_cles:g('mots_cles').value.split(',').map(s => s.trim()).filter(Boolean), actif:g('actif').checked};
+      if(!row.nom){ setSync('Donne un nom à la catégorie.', true); return; }
+      if(tr.dataset.cat) await run(S.sb.from('caisse_categories').update(row).eq('id', tr.dataset.cat), 'Catégorie enregistrée.');
+      else await run(S.sb.from('caisse_categories').insert({...row, ordre:(Math.max(0, ...S.categories.map(c => c.ordre)) + 10)}), 'Catégorie ajoutée.');
+      return;
+    }
+  };
+  v.onchange = async e => {
+    const t = e.target;
+    if(t.dataset.f !== undefined){ S.f[t.dataset.f] = t.value; render(); const again = v.querySelector(`[data-f="${t.dataset.f}"]`); if(again) again.focus(); return; }
+    if(t.dataset.accesNiveau){ await run(S.sb.from('caisse_acces').update({niveau:t.value}).eq('person_id', t.dataset.accesNiveau), 'Niveau modifié.'); }
+  };
+}
+function setTab(tab){ S.tab = tab; LS.set('caisse.tab', tab); render(); window.scrollTo({top:0}); }
+function normPhone(s){
+  let n = String(s || '').replace(/[\s.\-()]/g, '');
+  if(!n) return '';
+  if(n.startsWith('00')) n = '+' + n.slice(2);
+  else if(/^0[5-7]\d{8}$/.test(n)) n = '+212' + n.slice(1);
+  return /^\+[0-9]{8,15}$/.test(n) ? n : '';
+}
+async function openJustif(path){
+  const r = await S.sb.storage.from('caisse-justificatifs').createSignedUrl(path, 300);
+  if(r.error){ setSync('Le justificatif n’a pas pu être ouvert. ' + friendly(r.error), true); return; }
+  window.open(r.data.signedUrl, '_blank', 'noopener');
+}
+
+/* ---------- fenêtre de saisie ---------- */
+const dlg = $('#dlg'), form = $('#dlgForm');
+function openForm(kind, id, override){
+  const T = {alim:'caisse_alimentations', avance:'caisse_avances', depense:'caisse_depenses', ouvrier:'caisse_ouvriers'}[kind];
+  const src = {alim:S.alims, avance:S.avances, depense:S.depenses, ouvrier:S.ouvriers}[kind];
+  const cur = id ? {...(src.find(x => x.id === id) || {}), ...(override || {})} : {};
+  if(id && !cur.id) return;
+  const editable = kind === 'ouvrier' ? isSuper() : canWrite();
+  const dis = editable ? '' : 'disabled';
+  let title = '', body = '';
+  const dateF = `<label class="f"><span>Date</span><input type="date" name="date_op" required value="${esc(cur.date_op || todayISO())}" ${dis}></label>`;
+  const montantF = `<label class="f"><span>Montant (DH)</span><input type="number" name="montant" min="0.01" step="0.01" inputmode="decimal" required value="${cur.montant ?? ''}" ${dis}></label>`;
+  if(kind === 'alim'){
+    title = id ? 'Alimentation caisse' : 'Nouvelle alimentation caisse';
+    body = `<div class="frow">${dateF}${montantF}</div><label class="f"><span>Origine</span><input type="text" name="origine" placeholder="ex. avance client Inwi, retrait banque" value="${esc(cur.origine || '')}" ${dis}></label>
+      <label class="f"><span>Note</span><textarea name="note" rows="2" ${dis}>${esc(cur.note || '')}</textarea></label>`;
+  } else if(kind === 'avance'){
+    title = id ? 'Avance à un ouvrier' : 'Nouvelle avance (تسبيق)';
+    body = `<div class="frow">${dateF}${montantF}</div><label class="f"><span>Ouvrier</span><select name="ouvrier_id" required ${dis}>${ouvOptions(cur.ouvrier_id)}</select></label>
+      <label class="f"><span>Projet (optionnel)</span><select name="project_id" ${dis}>${projOptions(cur.project_id, {empty:'— Aucun projet précis —'})}</select></label>
+      <label class="f"><span>Note</span><textarea name="note" rows="2" ${dis}>${esc(cur.note || '')}</textarea></label>`;
+  } else if(kind === 'depense'){
+    const payeur = cur.payeur || 'ouvrier';
+    title = id ? 'Dépense' : 'Nouvelle dépense';
+    body = `<div class="seg" role="radiogroup" aria-label="Qui a payé ?"><label><input type="radio" name="payeur" value="ouvrier" ${payeur === 'ouvrier' ? 'checked' : ''} ${dis}>Payé par un ouvrier</label><label><input type="radio" name="payeur" value="direct" ${payeur === 'direct' ? 'checked' : ''} ${dis}>Payé en direct</label></div>
+      <label class="f" id="fOuvrier" ${payeur === 'direct' ? 'hidden' : ''}><span>Ouvrier</span><select name="ouvrier_id" ${dis}>${ouvOptions(cur.ouvrier_id)}</select></label>
+      <div class="frow">${dateF}${montantF}</div>
+      <label class="f"><span>Projet</span><select name="project_id" required ${dis}>${projOptions(cur.project_id)}</select></label>
+      <label class="f"><span>Catégorie</span><select name="categorie_id" required ${dis}>${catOptions(cur.categorie_id)}</select></label>
+      <label class="f"><span>Libellé</span><input type="text" name="libelle" dir="auto" placeholder="ex. مزوط 200" value="${esc(cur.libelle || '')}" ${dis}></label>
+      <label class="f"><span>Justificatif (photo du ticket, optionnel)</span>${cur.justificatif ? `<span><button class="linkbtn" type="button" data-justif-dlg="${esc(cur.justificatif)}">Voir le justificatif actuel</button></span>` : ''}<input type="file" name="fichier" accept="image/*,application/pdf" ${dis}></label>
+      ${id ? `<label class="f"><span>Statut</span><select name="statut" ${dis}>${Object.entries(STATUT).map(([k, [l]]) => `<option value="${k}" ${cur.statut === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : '<p class="muted small" style="margin:0">Une dépense saisie ici est validée directement.</p>'}
+      ${cur.validee_par ? `<p class="muted small" style="margin:0">Validée par ${esc(personName(cur.validee_par))} le ${new Date(cur.validee_le).toLocaleString('fr-FR')}</p>` : ''}`;
+  } else if(kind === 'ouvrier'){
+    title = id ? 'Ouvrier' : 'Nouvel ouvrier';
+    body = `<label class="f"><span>Nom</span><input type="text" name="nom" required value="${esc(cur.nom || '')}" ${dis}></label>
+      <label class="f"><span>Téléphone WhatsApp</span><input type="tel" name="telephone" placeholder="+212612345678 ou 0612345678" value="${esc(cur.telephone || '')}" ${dis}></label>
+      <label class="f"><span><input type="checkbox" name="actif" ${cur.actif !== false ? 'checked' : ''} ${dis}> Actif</span></label>
+      <label class="f"><span>Note</span><textarea name="note" rows="2" ${dis}>${esc(cur.note || '')}</textarea></label>`;
+  }
+  const by = cur.created_by ? `<span class="muted small">Saisi par ${esc(personName(cur.created_by) || '—')}</span>` : '';
+  form.innerHTML = `<h3>${esc(title)}</h3>${body}<p class="err" id="dlgErr" role="alert"></p>
+    <div class="dacts">${id && editable ? '<button class="btn danger" type="button" id="dlgDel">Supprimer</button>' : ''}${by}<span class="sp"></span><button class="btn" type="button" id="dlgCancel">${editable ? 'Annuler' : 'Fermer'}</button>${editable ? '<button class="btn primary" type="submit" id="dlgSave">Enregistrer</button>' : ''}</div>`;
+  form.onchange = e => { if(e.target.name === 'payeur') form.querySelector('#fOuvrier').hidden = e.target.value === 'direct'; };
+  form.onclick = e => { const j = e.target.closest('[data-justif-dlg]'); if(j) openJustif(j.dataset.justifDlg); };
+  $('#dlgCancel').onclick = () => dlg.close();
+  if($('#dlgDel')) $('#dlgDel').onclick = async () => {
+    if(!confirm('Supprimer définitivement cette ligne ? L’historique garde une trace de la suppression.')) return;
+    const r = await S.sb.from(T).delete().eq('id', id);
+    if(r.error){ $('#dlgErr').textContent = friendly(r.error); return; }
+    dlg.close(); await refresh(); setSync('Ligne supprimée.');
+  };
+  form.onsubmit = async e => {
+    e.preventDefault(); if(!editable) return;
+    const fd = new FormData(form), g = k => (fd.get(k) ?? '').toString().trim(), err = $('#dlgErr');
+    let row = {};
+    if(kind !== 'ouvrier'){
+      row.date_op = g('date_op'); row.montant = Number(g('montant'));
+      if(!row.date_op){ err.textContent = 'Indique la date.'; return; }
+      if(!(row.montant > 0)){ err.textContent = 'Indique un montant supérieur à 0.'; return; }
+    }
+    if(kind === 'alim'){ row.origine = g('origine'); row.note = g('note'); }
+    if(kind === 'avance'){ row.ouvrier_id = g('ouvrier_id'); row.project_id = g('project_id') || null; row.note = g('note'); if(!row.ouvrier_id){ err.textContent = 'Choisis l’ouvrier.'; return; } }
+    if(kind === 'depense'){
+      row.payeur = g('payeur') || 'ouvrier'; row.ouvrier_id = row.payeur === 'ouvrier' ? (g('ouvrier_id') || null) : null;
+      row.project_id = g('project_id') || null; row.categorie_id = g('categorie_id') || null; row.libelle = g('libelle');
+      row.statut = id ? g('statut') : 'validee';
+      if(row.payeur === 'ouvrier' && !row.ouvrier_id){ err.textContent = 'Choisis l’ouvrier qui a payé.'; return; }
+      if(row.statut === 'validee' && (!row.project_id || !row.categorie_id)){ err.textContent = 'Choisis le projet et la catégorie.'; return; }
+      const file = fd.get('fichier');
+      if(file && file.size){
+        if(file.size > 10 * 1024 * 1024){ err.textContent = 'Fichier trop lourd (10 Mo maximum).'; return; }
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+        const path = `${row.date_op.slice(0, 7)}/${crypto.randomUUID()}.${ext}`;
+        $('#dlgSave').disabled = true; err.textContent = 'Envoi du justificatif…';
+        const up = await S.sb.storage.from('caisse-justificatifs').upload(path, file, {contentType:file.type || undefined, upsert:false});
+        $('#dlgSave').disabled = false;
+        if(up.error){ err.textContent = 'Le justificatif n’a pas pu être envoyé. ' + friendly(up.error); return; }
+        row.justificatif = path; err.textContent = '';
+      }
+      if(!id) row.source = 'saisie';
+    }
+    if(kind === 'ouvrier'){
+      row.nom = g('nom'); row.note = g('note'); row.actif = fd.get('actif') === 'on';
+      const raw = g('telephone'); row.telephone = raw ? normPhone(raw) : null;
+      if(!row.nom){ err.textContent = 'Indique le nom.'; return; }
+      if(raw && !row.telephone){ err.textContent = 'Numéro invalide : écris-le au format international, par exemple +212612345678.'; return; }
+    }
+    $('#dlgSave').disabled = true;
+    const r = id ? await S.sb.from(T).update(row).eq('id', id) : await S.sb.from(T).insert(row);
+    if($('#dlgSave')) $('#dlgSave').disabled = false;
+    if(r.error){ err.textContent = friendly(r.error); return; }
+    dlg.close(); await refresh(); setSync('Enregistré.');
+  };
+  dlg.showModal();
+  const first = form.querySelector('input:not([type=radio]):not([disabled]),select:not([disabled])'); if(first) first.focus();
+}
+
+/* ---------- export Excel ---------- */
+let xlsxP = null;
+const loadXlsx = () => xlsxP || (xlsxP = new Promise((res, rej) => {
+  const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+  s.onload = () => window.XLSX ? res(window.XLSX) : rej(new Error('xlsx')); s.onerror = () => { xlsxP = null; rej(new Error('xlsx')); };
+  document.head.appendChild(s);
+}));
+async function exportXlsx(btn){
+  const rows = filteredMovements();
+  if(!rows.length){ setSync('Rien à exporter avec ces filtres.', true); return; }
+  btn.disabled = true;
+  try {
+    const X = await loadXlsx();
+    const serial = iso => { const [y, m, d] = iso.split('-').map(Number); return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 864e5; };
+    const data = rows.map(r => ({'Date':serial(r.date), 'Type':r.type, 'Ouvrier':r.ouvrier ? ouvName(r.ouvrier) : '', 'Projet':r.projet ? projName(r.projet) : '',
+      'Catégorie':r.cat ? (catOf(r.cat) || {}).nom || '' : '', 'Libellé':r.libelle || '', 'Entrée':r.entree || null, 'Sortie':r.sortie || null, 'Statut':STATUT[r.statut][0]}));
+    const ws = X.utils.json_to_sheet(data);
+    for(let i = 1; i <= data.length; i++){ const c = ws[X.utils.encode_cell({r:i, c:0})]; if(c) c.z = 'dd/mm/yyyy'; ['G', 'H'].forEach(col => { const x = ws[col + (i + 1)]; if(x) x.z = '#,##0.00'; }); }
+    ws['!cols'] = [12, 16, 18, 30, 24, 36, 12, 12, 11].map(wch => ({wch}));
+    ws['!autofilter'] = {ref:ws['!ref']};
+    const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Mouvements');
+    X.writeFile(wb, `caisse-mouvements-${todayISO()}.xlsx`);
+    setSync(`Export Excel téléchargé : ${rows.length} ligne${rows.length > 1 ? 's' : ''}.`);
+  } catch(e){ setSync('L’export Excel n’a pas pu être préparé. Vérifie ta connexion puis recommence.', true); }
+  btn.disabled = false;
+}
+
+/* ---------- connexion ---------- */
+function showAuth(html){ $('#app').hidden = true; const a = $('#auth'); a.hidden = false; a.innerHTML = html; }
+function loginForm(sb){
+  showAuth(`<form id="loginForm" class="authcard"><h2>Connexion</h2>
+    <label for="loginEmail" class="muted small">Adresse email</label><input type="email" id="loginEmail" required autocomplete="username">
+    <label for="loginPwd" class="muted small">Mot de passe</label><input type="password" id="loginPwd" required autocomplete="current-password">
+    <button class="btn primary" type="submit" id="loginBtn">Se connecter</button><p class="muted small" id="loginMsg" role="status">Même compte que pour « Projets et tâches ».</p></form>`);
+  $('#loginForm').addEventListener('submit', async e => {
+    e.preventDefault(); const email = $('#loginEmail').value.trim(), password = $('#loginPwd').value; if(!email || !password) return;
+    $('#loginBtn').disabled = true; $('#loginMsg').textContent = 'Connexion…';
+    const r = await sb.auth.signInWithPassword({email, password});
+    $('#loginBtn').disabled = false;
+    if(r.error) $('#loginMsg').textContent = /invalid/i.test(r.error.message || '') ? 'Email ou mot de passe incorrect.' : 'Connexion impossible : ' + r.error.message;
+  });
+  setSync('Connecte-toi pour accéder à la caisse.');
+}
+
+$('#tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if(b) setTab(b.dataset.tab); });
+
+(async () => {
+  const cfg = window.APP_CONFIG || {};
+  if(!cfg.supabaseUrl || !cfg.supabaseKey || !window.supabase){ setSync('La connexion à la base n’est pas configurée (config.js).', true); return; }
+  const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey);
+  S.sb = sb;
+  let awaitingLogin = false, hadSession = false;
+  sb.auth.onAuthStateChange(ev => {
+    if(ev === 'SIGNED_IN' && awaitingLogin){ awaitingLogin = false; location.reload(); }
+    if(ev === 'SIGNED_OUT' && hadSession){ hadSession = false; location.reload(); }
+  });
+  const {data:{session}} = await sb.auth.getSession();
+  if(!session){ awaitingLogin = true; loginForm(sb); return; }
+  hadSession = true;
+  $('#who').hidden = false; $('#whoEmail').textContent = session.user.email || '';
+  $('#logout').addEventListener('click', () => sb.auth.signOut());
+  const lv = await sb.rpc('caisse_mon_acces');
+  if(lv.error || !lv.data){
+    showAuth(`<div class="authcard"><h2>Accès réservé</h2><p class="muted">Le compte ${esc(session.user.email || '')} n’a pas accès à la caisse. Demande à un super admin de te donner l’accès.</p><p><a class="btn" href="./">← Retour aux projets</a></p></div>`);
+    setSync(lv.error ? 'Vérification de l’accès impossible : ' + friendly(lv.error) : 'Pas d’accès à la caisse.', true); return;
+  }
+  S.level = lv.data; $('#whoLevel').textContent = LEVEL_LABEL[S.level] || S.level;
+  $('#tabReglages').hidden = !isSuper();
+  if(S.tab === 'reglages' && !isSuper()) S.tab = 'bord';
+  $('#auth').hidden = true; $('#app').hidden = false;
+  await refresh();
+  if(S.level === 'lecture') setSync('Lecture seule : tu consultes la caisse sans pouvoir la modifier.');
+  sb.channel('rt-caisse')
+    .on('postgres_changes', {event:'*', schema:'public', table:'caisse_depenses'}, scheduleReload)
+    .on('postgres_changes', {event:'*', schema:'public', table:'caisse_avances'}, scheduleReload)
+    .on('postgres_changes', {event:'*', schema:'public', table:'caisse_alimentations'}, scheduleReload)
+    .on('postgres_changes', {event:'*', schema:'public', table:'caisse_messages'}, scheduleReload)
+    .subscribe();
+})();
+})();
+</script>
+</body>
+</html>

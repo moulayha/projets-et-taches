@@ -1,5 +1,7 @@
 // Gestion des comptes de l'application (réservée aux administrateurs et super admins).
 // Un administrateur ne peut ni créer, ni modifier, ni supprimer un compte super admin.
+// Il ne touche pas non plus aux comptes qui ont accès à la caisse (rôle « billing »
+// ou personne présente dans caisse_acces) et ne peut pas donner le rôle « billing ».
 // Actions : create, update, set_password, delete.
 // Utilise la clé service_role, disponible uniquement côté serveur.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -16,6 +18,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ROLES = ["superadmin", "admin", "member", "billing", "viewer"];
 const ADMIN_ROLES = ["superadmin", "admin"];
 const SUPER_ONLY = "Seul un super admin peut modifier un compte super admin.";
+const CAISSE_ONLY = "Seul un super admin peut gérer un compte qui a accès à la caisse.";
+const BILLING_ONLY = "Seul un super admin peut donner le rôle facturation.";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -48,6 +52,12 @@ Deno.serve(async (req) => {
     if (!person) return json({ error: "Personne introuvable." }, 404);
     const { data: current } = await admin.from("app_users").select("id, email, role").eq("id", personId).maybeSingle();
 
+    // Comptes protégés : accès à la caisse (facturation ou liste caisse_acces)
+    const { data: caisseAcces, error: caisseErr } = await admin.from("caisse_acces").select("person_id").eq("person_id", personId).maybeSingle();
+    if (caisseErr) return json({ error: "Vérification des accès caisse impossible." }, 500);
+    const caisseProtege = current?.role === "billing" || !!caisseAcces;
+    if (!meSuper && caisseProtege) return json({ error: CAISSE_ONLY }, 403);
+
     const findAuthUser = async (email: string) => {
       for (let page = 1; page < 50; page++) {
         const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
@@ -72,6 +82,7 @@ Deno.serve(async (req) => {
       if (!EMAIL_RE.test(email)) return json({ error: "Adresse email invalide." }, 400);
       if (!ROLES.includes(role)) return json({ error: "Rôle invalide." }, 400);
       if (role === "superadmin" && !meSuper) return json({ error: "Seul un super admin peut créer un compte super admin." }, 403);
+      if (role === "billing" && !meSuper) return json({ error: BILLING_ONLY }, 403);
       if (current && current.role === "superadmin" && !meSuper) return json({ error: SUPER_ONLY }, 403);
       if (!checkPassword(body.password)) return json({ error: "Le mot de passe doit faire au moins 8 caractères." }, 400);
       const { data: taken } = await admin.from("app_users").select("id").eq("email", email).neq("id", personId).maybeSingle();
@@ -111,6 +122,7 @@ Deno.serve(async (req) => {
       if (!ROLES.includes(role)) return json({ error: "Rôle invalide." }, 400);
       if (!EMAIL_RE.test(email)) return json({ error: "Adresse email invalide." }, 400);
       if (role === "superadmin" && current.role !== "superadmin" && !meSuper) return json({ error: "Seul un super admin peut nommer un super admin." }, 403);
+      if (role === "billing" && !meSuper) return json({ error: BILLING_ONLY }, 403);
       if (isSelf && role !== current.role) return json({ error: "Tu ne peux pas modifier ton propre rôle." }, 400);
       if (ADMIN_ROLES.includes(current.role) && !ADMIN_ROLES.includes(role) && (await adminCount()) <= 1) {
         return json({ error: "Il doit rester au moins un administrateur." }, 400);

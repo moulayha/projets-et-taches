@@ -82,6 +82,8 @@ h2 .n{font-family:var(--mono);font-size:12px;font-weight:400;color:var(--muted)}
 .tab:hover{background:color-mix(in srgb, var(--tb) 55%, transparent);color:var(--tc)}
 .tab[aria-selected="true"]{color:var(--tc);background:var(--tb);box-shadow:inset 0 -2px 0 var(--ts);font-weight:600}
 .btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:500;white-space:nowrap}
+a.btn{color:var(--fg);text-decoration:none;display:inline-flex;align-items:center}
+a.btn[hidden]{display:none}
 .btn:hover{background:var(--hover)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
 .btn.primary:hover{filter:brightness(1.08)}
@@ -399,7 +401,7 @@ section.db .db-head h2{position:absolute;width:1px;height:1px;overflow:hidden;cl
   <div class="page-head">
     <div class="page-logo"><img src="logo-clic-events.png" alt="CLIC Events — Communication & Événementiel" width="640" height="283"></div>
     <div class="titlebar"><h1>Projets et tâches</h1>
-      <div class="tactions"><button class="btn" id="mineBtn" type="button" aria-pressed="false" hidden>Tous les projets</button>
+      <div class="tactions"><a class="btn" id="caisseBtn" href="caisse.html" hidden>Caisse</a><button class="btn" id="mineBtn" type="button" aria-pressed="false" hidden>Tous les projets</button>
       <span class="who" id="who" hidden><span><strong id="whoName"></strong> <span id="whoEmail"></span></span><button class="btn" id="mypwdBtn" type="button">Mon mot de passe</button><button class="btn" id="logout" type="button">Déconnexion</button></span>
       <button class="btn" id="settingsBtn" type="button" hidden><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h7M12 4h2M2 12h2M7 12h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="10.5" cy="4" r="1.8" stroke="currentColor" stroke-width="1.6"/><circle cx="5.5" cy="12" r="1.8" stroke="currentColor" stroke-width="1.6"/></svg>Paramètres</button></div></div>
     <p class="sync" id="sync" role="status">Chargement des données…</p>
@@ -2190,6 +2192,8 @@ renderTabs(); renderMain();
   const db = makeDb(sb);
   S.db = db; S.sb = sb;
   $('#settingsBtn').hidden = !(isAdmin() || isBilling());
+  // Bouton « Caisse » : seulement pour les personnes qui y ont accès (la base vérifie aussi).
+  sb.rpc('caisse_mon_acces').then(r => { if(!r.error && r.data) $('#caisseBtn').hidden = false; }, () => {});
   $('#mineBtn').hidden = false;
   if(!canEdit()){ S.readOnly = true; S.err = 'viewer';
     setSync(isBilling() ? 'Facturation : tu consultes les projets et les tâches ; tu peux modifier l’état de facturation, archiver un projet et compléter les fiches clients.' : 'Lecture seule : tu peux consulter les projets et les tâches, mais pas les modifier.'); }
