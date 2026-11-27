@@ -71,6 +71,10 @@ h3{font-family:var(--display);font-weight:700;font-size:17px;margin:0 0 10px}
 .kpi .v{font-family:var(--display);font-weight:700;font-size:26px;margin-top:2px;font-variant-numeric:tabular-nums}
 .kpi .s{color:var(--muted);font-size:12px}
 .neg{color:var(--danger)}
+.alertes{display:grid;gap:8px;margin:0 0 20px}
+.alerte{display:flex;gap:10px;align-items:baseline;padding:10px 14px;border-radius:10px;font-size:14px;line-height:1.45}
+.alerte.rouge{background:var(--bad-bg);color:var(--bad-fg)} .alerte.orange{background:var(--warn-bg);color:var(--warn-fg)} .alerte.bleu{background:var(--info-bg);color:var(--info-fg)}
+.alerte .linkbtn{color:inherit;text-decoration:underline}
 .tscroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 table.grid{border-collapse:collapse;width:100%;font-size:13.5px}
 .grid th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -279,6 +283,35 @@ const addButtons = () => canWrite() ? `<div class="acts">
   <button class="btn" type="button" data-new="avance">+ Avance intervenant</button>
   <button class="btn primary" type="button" data-new="depense">+ Dépense</button></div>` : '';
 
+// Alertes calculées en direct à partir des données chargées (rafraîchies en temps réel).
+const SEUIL_BUDGET = 0.8;      // alerte orange à 80 % du budget
+const JOURS_A_VALIDER = 3;     // une dépense qui attend plus de 3 jours
+function alertes(){
+  const out = [];
+  const p = S.principal || {};
+  if(Number(p.solde) < 0) out.push({n:'rouge', t:`La caisse principale est en négatif : ${dh(p.solde)}. Pense à l’alimenter.`});
+  S.soldes.filter(s => Number(s.solde) < 0).sort((a, b) => Number(a.solde) - Number(b.solde)).forEach(s =>
+    out.push({n:'rouge', t:`${esc(s.nom)} est en négatif : la société lui doit ${dh(-Number(s.solde))}.`}));
+  const dep = new Map();
+  S.depenses.filter(d => d.statut === 'validee' && d.project_id).forEach(d => dep.set(d.project_id, (dep.get(d.project_id) || 0) + Number(d.montant)));
+  S.actifs.filter(a => a.budget != null && Number(a.budget) > 0).forEach(a => {
+    const b = Number(a.budget), c = dep.get(a.id) || 0, nom = esc((a.name || '').trim());
+    if(c > b) out.push({n:'rouge', t:`Budget dépassé sur <b>${nom}</b> : ${dh(c)} dépensés pour ${dh(b)} prévus (+${dh(c - b)}).`, go:'projets'});
+    else if(c >= b * SEUIL_BUDGET) out.push({n:'orange', t:`<b>${nom}</b> a utilisé ${Math.round(c / b * 100)} % de son budget (reste ${dh(b - c)}).`, go:'projets'});
+  });
+  const limite = new Date(Date.now() - JOURS_A_VALIDER * 864e5).toISOString();
+  const vieux = S.depenses.filter(d => d.statut === 'a_valider' && d.created_at < limite).length;
+  if(vieux) out.push({n:'orange', t:`${vieux} dépense${vieux > 1 ? 's attendent' : ' attend'} une validation depuis plus de ${JOURS_A_VALIDER} jours.`, go:'valider'});
+  const inc = (S.inconnus || []).length;
+  if(inc) out.push({n:'bleu', t:`${inc} contact${inc > 1 ? 's' : ''} WhatsApp non reconnu${inc > 1 ? 's' : ''} : le bot ne leur répond pas.`, go:'ouvriers'});
+  return out;
+}
+function viewAlertes(){
+  const a = alertes(); if(!a.length) return '';
+  const lien = {projets:'Voir les projets', valider:'Ouvrir la file', ouvriers:'Voir les intervenants'};
+  return `<div class="alertes" role="status">${a.map(x => `<div class="alerte ${x.n}"><span aria-hidden="true">${x.n === 'rouge' ? '⚠️' : x.n === 'orange' ? '⏳' : 'ℹ️'}</span><span>${x.t}${x.go ? ` <button class="linkbtn" type="button" data-goto="${x.go}">${lien[x.go]}</button>` : ''}</span></div>`).join('')}</div>`;
+}
+
 function viewBord(){
   const p = S.principal || {alimentations:0, avances:0, depenses_directes:0, solde:0};
   const chezOuvriers = S.soldes.reduce((a, s) => a + Math.max(0, Number(s.solde) || 0), 0);
@@ -288,6 +321,7 @@ function viewBord(){
   const nbVal = S.depenses.filter(d => d.statut === 'a_valider').length;
   const rows = S.soldes.filter(s => s.actif || Number(s.avances) || Number(s.depenses)).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
   return `<div class="head"><h2>Tableau de bord</h2>${addButtons()}</div>
+  ${viewAlertes()}
   <div class="kpis">
     <div class="kpi"><div class="l">Caisse principale</div><div class="v ${Number(p.solde) < 0 ? 'neg' : ''}">${dh(p.solde)}</div>
       <div class="s">Alimentations ${dh(p.alimentations)} − avances ${dh(p.avances)} − paiements directs ${dh(p.depenses_directes)}</div></div>

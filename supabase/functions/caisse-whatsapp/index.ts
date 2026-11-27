@@ -1,4 +1,4 @@
-// Bot WhatsApp de la caisse (étape 4 : textes et photos).
+// Bot WhatsApp de la caisse (étapes 4 et 5 : textes, photos et vocaux).
 //
 // Meta (WhatsApp Cloud API) appelle cette fonction pour chaque message reçu.
 //  - GET  : vérification du webhook (hub.challenge).
@@ -11,6 +11,7 @@
 //   WHATSAPP_APP_SECRET       « Clé secrète de l'app » Meta, pour la signature
 //   WHATSAPP_VERIFY_TOKEN     mot de passe choisi pour la vérification du webhook
 //   ANTHROPIC_API_KEY         clé de l'API Claude
+//   GROQ_API_KEY              clé Groq pour transcrire les vocaux (étape 5, optionnelle)
 //   WHATSAPP_API_VERSION      optionnel, ex. v23.0
 // SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont fournis automatiquement.
 //
@@ -33,6 +34,9 @@ const GRAPH = `https://graph.facebook.com/${WA_VERSION}`;
 
 // Le modèle le moins cher (choix de l'utilisateur) : moins d'un centime de dirham par message.
 const MODEL = "claude-haiku-5-5";
+// Transcription des vocaux (étape 5) : Groq, Whisper large v3 (le plus précis pour l'arabe).
+const GROQ_KEY = env("GROQ_API_KEY");
+const STT_MODEL = "whisper-large-v3";
 const BUCKET = "caisse-justificatifs";
 const ETAPE_VALIDITE_MS = 3 * 60 * 60 * 1000; // une question reste valable 3 h
 const MEDIA_MAX = 10 * 1024 * 1024;
@@ -174,16 +178,28 @@ async function traiter(m: any, c: any) {
     }
   }
 
+  // Vocal : transcription, puis traitement comme un texte. Le vocal reste joint pour l'écoute.
+  let lu = texte;
+  if (typeDb === "vocal" && media) {
+    try {
+      lu = await transcrire(media);
+      console.log("transcription", JSON.stringify({ ok: !!lu, longueur: lu?.length ?? 0 }));
+      if (lu) await sb.from("caisse_messages").update({ texte: lu }).eq("id", msg.id);
+    } catch (e) {
+      console.error("transcription", String(e));
+    }
+  }
+
   // Une question en attente (chiffre du projet ou montant) ?
   const { data: conv } = await sb.from("caisse_conversations").select("*").eq("ouvrier_id", ouv.id).maybeSingle();
   if (conv) {
     const frais = Date.now() - new Date(conv.maj).getTime() < ETAPE_VALIDITE_MS;
-    if (frais && typeDb === "texte" && texte && await repondreEtape(conv, texte, from)) return;
+    if (frais && (typeDb === "texte" || typeDb === "vocal") && lu && await repondreEtape(conv, lu, from)) return;
     await sb.from("caisse_conversations").delete().eq("ouvrier_id", ouv.id);
   }
 
-  if (typeDb === "vocal") {
-    // La transcription des vocaux arrive à l'étape 5 : le gestionnaire écoute et complète.
+  if (typeDb === "vocal" && !lu) {
+    // Vocal non transcrit : le gestionnaire écoute et complète.
     await sb.from("caisse_depenses").insert({
       payeur: "ouvrier", ouvrier_id: ouv.id, statut: "a_valider", source: "whatsapp_vocal",
       message_id: msg.id, libelle: "Message vocal", justificatif: media?.path ?? null,
@@ -196,7 +212,37 @@ async function traiter(m: any, c: any) {
     return;
   }
 
-  await nouvelleDepense({ ouvId: ouv.id, msgId: msg.id, from, texte, media, typeDb });
+  await nouvelleDepense({ ouvId: ouv.id, msgId: msg.id, from, texte: lu, media, typeDb });
+}
+
+// Transcription d'un vocal WhatsApp (ogg/opus) par Groq. Le vocabulaire de la caisse
+// (catégories, noms courts des projets) est donné en indice pour mieux reconnaître la darija.
+async function transcrire(media: { mime: string; bytes: Uint8Array }): Promise<string | null> {
+  if (!GROQ_KEY) return null;
+  const [projets, categories] = await Promise.all([chargerProjets(), chargerCategories()]);
+  const mots = [
+    ...categories.flatMap((c) => c.mots_cles ?? []),
+    ...projets.map((p) => (p.nom_court || p.name || "").trim()),
+    "درهم",
+  ].filter(Boolean);
+  const indice = ("مصاريف الكاسة: " + mots.join("، ")).slice(0, 400);
+  const ext = media.mime.includes("ogg") || media.mime.includes("opus") ? "ogg" : media.mime.split("/")[1] || "ogg";
+  const form = new FormData();
+  form.append("file", new Blob([media.bytes], { type: media.mime }), `vocal.${ext}`);
+  form.append("model", STT_MODEL);
+  form.append("language", "ar");
+  form.append("response_format", "json");
+  form.append("temperature", "0");
+  form.append("prompt", indice);
+  const r = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${GROQ_KEY}` },
+    body: form,
+  });
+  if (!r.ok) throw new Error(`groq ${r.status} ${(await r.text()).slice(0, 300)}`);
+  const j = await r.json();
+  const t = String(j?.text ?? "").trim();
+  return t || null;
 }
 
 // ---------------------------------------------------------------- Questions en attente
@@ -205,14 +251,26 @@ function chiffresLatins(s: string) {
   return s.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0));
 }
 
+// Chiffres de 1 à 12 dits en darija ou en arabe (réponse vocale au choix du projet).
+const NOMBRES: Record<string, number> = {
+  "واحد": 1, "وحدة": 1, "جوج": 2, "زوج": 2, "اثنان": 2, "اثنين": 2, "تلاتة": 3, "ثلاثة": 3, "تلاثة": 3,
+  "ربعة": 4, "أربعة": 4, "اربعة": 4, "خمسة": 5, "ستة": 6, "سبعة": 7, "تمنية": 8, "ثمانية": 8, "تمانية": 8,
+  "تسعة": 9, "تسعود": 9, "عشرة": 10, "حداش": 11, "احدعشر": 11, "طناش": 12, "اثناعشر": 12,
+};
+function nombreDit(s: string): string | null {
+  const mot = s.replace(/[\s.,!؟?،]+/g, "").replace(/^(رقم|الرقم|نمرة)/, "");
+  return NOMBRES[mot] ? String(NOMBRES[mot]) : null;
+}
+
 async function repondreEtape(conv: any, texte: string, from: Dest): Promise<boolean> {
   const s = chiffresLatins(texte).trim();
   const ids: string[] = conv.depense_ids ?? [];
 
   if (conv.etape === "projet") {
-    if (!/^\d{1,3}$/.test(s)) return false; // autre chose : nouveau message
+    const choix = /^\d{1,3}$/.test(s) ? s : nombreDit(s); // « 2 », ou « جوج » dit dans un vocal
+    if (!choix) return false; // autre chose : nouveau message
     const options: string[] = conv.options ?? [];
-    const n = Number(s);
+    const n = Number(choix);
     if (n < 1 || n > options.length) {
       await envoyer(from, "❓ هاد الرقم ماكاينش.\n" + await listeProjetsTexte(options));
       await sb.from("caisse_conversations").update({ maj: new Date().toISOString() }).eq("ouvrier_id", conv.ouvrier_id);
@@ -288,13 +346,13 @@ async function nouvelleDepense(o: {
   media: { path: string; mime: string; bytes: Uint8Array } | null; typeDb: string;
 }) {
   const [projets, categories] = await Promise.all([chargerProjets(), chargerCategories()]);
-  const source = o.typeDb === "photo" ? "whatsapp_photo" : "whatsapp_texte";
+  const source = o.typeDb === "photo" ? "whatsapp_photo" : o.typeDb === "vocal" ? "whatsapp_vocal" : "whatsapp_texte";
   const aujourdhui = dateMaroc(new Date());
 
   let analyse: Analyse | null = null;
   let erreur: string | null = null;
   try {
-    analyse = await analyser(o.texte, o.media, projets, categories, aujourdhui);
+    analyse = await analyser(o.texte, o.media, projets, categories, aujourdhui, o.typeDb === "vocal");
   } catch (e) {
     erreur = String((e as Error)?.message ?? e);
     console.error("analyse", erreur);
@@ -313,6 +371,15 @@ async function nouvelleDepense(o: {
   }
 
   if (!analyse.est_depense || !analyse.depenses.length) {
+    if (o.typeDb === "vocal") {
+      // Vocal sans dépense comprise : il reste à écouter dans « À valider » (rien n'est perdu).
+      await sb.from("caisse_depenses").insert({
+        payeur: "ouvrier", ouvrier_id: o.ouvId, statut: "a_valider", source, message_id: o.msgId,
+        libelle: (o.texte ?? "Message vocal").slice(0, 500), justificatif: o.media?.path ?? null,
+      });
+      await envoyer(o.from, "🎤 ✅ توصلنا بالأوديو");
+      return;
+    }
     if (o.media) {
       // Une photo sans dépense lisible reste à vérifier : c'est souvent un ticket flou.
       const { data } = await sb.from("caisse_depenses").insert({
@@ -419,6 +486,7 @@ async function analyser(
   projets: Projet[],
   categories: Categorie[],
   aujourdhui: string,
+  vocal = false,
 ): Promise<Analyse> {
   if (!claude) throw new Error("ANTHROPIC_API_KEY manquant");
 
@@ -439,7 +507,10 @@ ${categories.map((c) => `${c.nom} : ${(c.mots_cles ?? []).join("، ")}`).join("\
       contenu.push({ type: "image", source: { type: "base64", media_type: media.mime, data } });
     }
   }
-  contenu.push({ type: "text", text: `${contexte}\n\nMessage de l'intervenant :\n<message>\n${texte ?? "(photo sans texte)"}\n</message>` });
+  const entete = vocal
+    ? "Message vocal de l'intervenant, transcrit automatiquement (la transcription peut déformer des mots ; les nombres peuvent être écrits en lettres, ex. « ميتين » = 200, « خمسين » = 50) :"
+    : "Message de l'intervenant :";
+  contenu.push({ type: "text", text: `${contexte}\n\n${entete}\n<message>\n${texte ?? "(photo sans texte)"}\n</message>` });
 
   const reponse: any = await (claude.messages.create as any)({
     model: MODEL,
