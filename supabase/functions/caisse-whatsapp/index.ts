@@ -1,22 +1,27 @@
-// Bot WhatsApp de la caisse (étapes 4 et 5 : textes, photos et vocaux).
+// Bot WhatsApp de la caisse : textes, photos de tickets et vocaux des intervenants.
 //
-// Meta (WhatsApp Cloud API) appelle cette fonction pour chaque message reçu.
-//  - GET  : vérification du webhook (hub.challenge).
-//  - POST : messages. La signature X-Hub-Signature-256 est vérifiée, puis on
-//           traite le message, puis répond 200.
+// Appels reçus :
+//  - GET                    : vérification du webhook par Meta (hub.challenge).
+//  - POST (Meta)            : messages entrants. Signature X-Hub-Signature-256 vérifiée,
+//                             message traité, puis réponse 200.
+//  - POST ?action=notifier  : depuis la page caisse (utilisateur connecté, accès gestion)
+//                             pour prévenir un intervenant d'une avance ou d'un refus.
 //
-// Secrets attendus (Supabase → Edge Functions → Secrets) :
+// Secrets (Supabase → Edge Functions → Secrets) :
 //   WHATSAPP_TOKEN            jeton d'accès permanent (utilisateur système Meta)
 //   WHATSAPP_PHONE_NUMBER_ID  identifiant du numéro du bot (pas le numéro lui-même)
 //   WHATSAPP_APP_SECRET       « Clé secrète de l'app » Meta, pour la signature
 //   WHATSAPP_VERIFY_TOKEN     mot de passe choisi pour la vérification du webhook
 //   ANTHROPIC_API_KEY         clé de l'API Claude
-//   GROQ_API_KEY              clé Groq pour transcrire les vocaux (étape 5, optionnelle)
+//   GROQ_API_KEY              clé Groq pour transcrire les vocaux (optionnelle)
+//   WHATSAPP_TPL_AVANCE       optionnel : modèle Meta approuvé pour l'avis d'avance hors 24 h
+//   WHATSAPP_TPL_REJET        optionnel : modèle Meta approuvé pour l'avis de refus hors 24 h
+//   WHATSAPP_TPL_LANGUE       optionnel : langue des modèles (défaut « ar »)
 //   WHATSAPP_API_VERSION      optionnel, ex. v23.0
-// SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont fournis automatiquement.
+// SUPABASE_URL, SUPABASE_ANON_KEY et SUPABASE_SERVICE_ROLE_KEY sont fournis automatiquement.
 //
-// Déployer avec verify_jwt = false : Meta n'envoie pas de JWT, la signature
-// HMAC fait office d'authentification.
+// Déployer avec verify_jwt = false : Meta n'envoie pas de JWT (la signature HMAC
+// l'authentifie) ; l'action « notifier » vérifie elle-même le jeton de l'utilisateur.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -31,25 +36,41 @@ const WA_APP_SECRET = env("WHATSAPP_APP_SECRET");
 const WA_VERIFY = env("WHATSAPP_VERIFY_TOKEN");
 const WA_VERSION = env("WHATSAPP_API_VERSION") || "v23.0";
 const GRAPH = `https://graph.facebook.com/${WA_VERSION}`;
+const TPL_AVANCE = env("WHATSAPP_TPL_AVANCE");
+const TPL_REJET = env("WHATSAPP_TPL_REJET");
+const TPL_LANGUE = env("WHATSAPP_TPL_LANGUE") || "ar";
 
 // Le modèle le moins cher (choix de l'utilisateur) : moins d'un centime de dirham par message.
 const MODEL = "claude-haiku-5-5";
-// Transcription des vocaux (étape 5) : Groq, Whisper large v3 (le plus précis pour l'arabe).
+// Transcription des vocaux : Groq, Whisper large v3 (le plus précis pour l'arabe).
 const GROQ_KEY = env("GROQ_API_KEY");
 const STT_MODEL = "whisper-large-v3";
 const BUCKET = "caisse-justificatifs";
 const ETAPE_VALIDITE_MS = 3 * 60 * 60 * 1000; // une question reste valable 3 h
+const ANNULATION_MS = 3 * 60 * 60 * 1000;     // « غلط » annule une dépense envoyée il y a moins de 3 h
 const MEDIA_MAX = 10 * 1024 * 1024;
+const HORS_FENETRE = 131047;                   // code Meta : plus de 24 h sans message de l'intervenant
+const LRM = "\u200E";                          // marque gauche-à-droite (voir listeProjetsTexte)
 
-const sb = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
+const SUPA_URL = env("SUPABASE_URL");
+const sb = createClient(SUPA_URL, env("SUPABASE_SERVICE_ROLE_KEY"), {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 const claude = env("ANTHROPIC_API_KEY") ? new Anthropic() : null;
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+const json = (o: unknown, status = 200) =>
+  new Response(JSON.stringify(o), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 // ---------------------------------------------------------------- HTTP
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   if (req.method === "GET") {
     const ok = url.searchParams.get("hub.mode") === "subscribe" && WA_VERIFY !== "" &&
@@ -60,38 +81,34 @@ Deno.serve(async (req) => {
   }
   if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
 
+  if (url.searchParams.get("action") === "notifier") return await notifier(req);
+
   const raw = await req.text();
   if (!(await signatureOk(raw, req.headers.get("x-hub-signature-256")))) {
     return new Response("bad signature", { status: 401 });
   }
-
   let body: any;
   try { body = JSON.parse(raw); } catch { return new Response("bad json", { status: 400 }); }
 
-  const messages: any[] = [];
-  const resume: any[] = [];
+  const messages: { m: any; c: any }[] = [];
   for (const entry of body?.entry ?? []) {
     for (const change of entry?.changes ?? []) {
       const v = change?.value;
       const pid = String(v?.metadata?.phone_number_id ?? "");
-      const ignore = WA_PHONE_ID !== "" && pid !== "" && pid !== WA_PHONE_ID;
-      resume.push({ champ: change?.field, pid, messages: v?.messages?.length ?? 0, statuts: v?.statuses?.length ?? 0, ignore });
-      if (ignore) continue;
+      if (WA_PHONE_ID && pid && pid !== WA_PHONE_ID) continue; // autre numéro du portefeuille
       const contacts: any[] = v?.contacts ?? [];
       for (const m of v?.messages ?? []) {
-        // Le contact qui correspond au message : numéro (wa_id) et/ou identifiant WhatsApp (user_id).
+        // Le contact du message : numéro (wa_id) et/ou identifiant WhatsApp (user_id).
         const c = contacts.find((x) => (m.from_user_id && x?.user_id === m.from_user_id) || (m.from && x?.wa_id === m.from)) ?? contacts[0];
         messages.push({ m, c });
       }
     }
   }
-  // Journal sans contenu : utile pour comprendre un message ignoré.
-  console.log("webhook", JSON.stringify({ objet: body?.object, resume, pidConfigure: WA_PHONE_ID.length }));
 
   // Traitement avant de répondre (quelques secondes). Si Meta renvoie le même
   // message entre-temps, wa_message_id unique évite le doublon.
   for (const { m, c } of messages) {
-    try { await traiter(m, c); } catch (e) { console.error("traitement en erreur", m?.id, JSON.stringify(e), String(e)); }
+    try { await traiter(m, c); } catch (e) { console.error("traitement en erreur", m?.id, String(e)); }
   }
   return new Response("ok", { status: 200 });
 });
@@ -102,22 +119,22 @@ async function signatureOk(raw: string, header: string | null): Promise<boolean>
     "raw", new TextEncoder().encode(WA_APP_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
   );
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(raw)));
-  const attendu = Array.from(sig, (b) => b.toString(16).padStart(2, "0")).join("");
+  const attendu = hex(sig);
   const recu = header.slice(7).toLowerCase();
   if (recu.length !== attendu.length) return false;
   let diff = 0;
   for (let i = 0; i < attendu.length; i++) diff |= attendu.charCodeAt(i) ^ recu.charCodeAt(i);
   return diff === 0;
 }
+const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 
-// ---------------------------------------------------------------- Messages
+// ---------------------------------------------------------------- Messages entrants
 
 type Projet = { id: string; code: string | null; name: string | null; client: string | null; nom_court: string | null; masque_whatsapp?: boolean };
 type Categorie = { id: string; nom: string; mots_cles: string[]; icone: string };
-
-// Destinataire d'une réponse : le numéro si on le connaît (recommandé par Meta,
-// cela garde les numéros dans les webhooks suivants), sinon l'identifiant WhatsApp.
+// Destinataire : le numéro si on le connaît (recommandé par Meta), sinon l'identifiant WhatsApp.
 type Dest = { to?: string; recipient?: string };
+type Media = { path: string; mime: string; bytes: Uint8Array };
 
 async function traiter(m: any, c: any) {
   const numero = String(m?.from ?? c?.wa_id ?? "").replace(/\D/g, "");
@@ -132,6 +149,9 @@ async function traiter(m: any, c: any) {
     : t === "audio" ? "vocal"
     : t === "document" && /^(image\/|application\/pdf)/.test(m.document?.mime_type ?? "") ? "photo"
     : "autre";
+  // Réponse au menu des projets : on garde l'identifiant de la ligne choisie (« projet:3 »).
+  const choixMenu: string | null = t === "interactive"
+    ? (m.interactive?.list_reply?.id ?? m.interactive?.button_reply?.id ?? null) : null;
   const texte: string | null = (t === "text" ? m.text?.body
     : t === "image" ? m.image?.caption
     : t === "document" ? m.document?.caption
@@ -141,61 +161,66 @@ async function traiter(m: any, c: any) {
   const recuLe = m.timestamp ? new Date(Number(m.timestamp) * 1000).toISOString() : new Date().toISOString();
 
   // L'intervenant : par son numéro, sinon par son identifiant WhatsApp.
+  const champs = "id, nom, actif, telephone, wa_user_id";
   let ouv: any = null;
-  if (tel) ouv = (await sb.from("caisse_ouvriers").select("id, nom, actif, telephone, wa_user_id").eq("telephone", tel).maybeSingle()).data;
-  if (!ouv && uid) ouv = (await sb.from("caisse_ouvriers").select("id, nom, actif, telephone, wa_user_id").eq("wa_user_id", uid).maybeSingle()).data;
+  if (tel) ouv = (await sb.from("caisse_ouvriers").select(champs).eq("telephone", tel).maybeSingle()).data;
+  if (!ouv && uid) ouv = (await sb.from("caisse_ouvriers").select(champs).eq("wa_user_id", uid).maybeSingle()).data;
   // Reconnu par son numéro : on retient son identifiant pour le jour où le numéro manquera.
   if (ouv && uid && ouv.wa_user_id !== uid) {
     const { error: e } = await sb.from("caisse_ouvriers").update({ wa_user_id: uid }).eq("id", ouv.id);
     if (e) console.warn("identifiant non enregistré", e.message);
   }
-  console.log("traiter", JSON.stringify({ type: t, numero: !!tel, identifiant: !!uid, intervenant: !!ouv }));
 
   // Message brut, une seule fois (Meta peut renvoyer le même message).
   const { data: msg, error } = await sb.from("caisse_messages")
     .insert({ telephone: tel, wa_user_id: uid, profil_nom: profil, ouvrier_id: ouv?.id ?? null, type: typeDb, texte, wa_message_id: m.id, recu_le: recuLe })
     .select("id").single();
   if (error) {
-    if (error.code === "23505") { console.log("déjà reçu"); return; }
+    if (error.code === "23505") return; // déjà reçu
     throw error;
   }
 
   // Expéditeur inconnu ou intervenant désactivé : on garde la trace, sans répondre.
   // Le gestionnaire peut l'associer à un intervenant dans Caisse → Intervenants.
   if (!ouv || !ouv.actif) return;
-  const numConnu = String(ouv.telephone ?? tel ?? "").replace(/\D/g, "");
-  const from: Dest = { to: numConnu || undefined, recipient: uid ?? undefined };
+  const from = destDe(ouv, tel, uid);
 
-  // Fichier joint (photo, ticket PDF, vocal) → stockage privé.
-  let media: { path: string; mime: string; bytes: Uint8Array } | null = null;
+  // Fichier joint (photo, ticket PDF, vocal) → stockage privé + empreinte pour les doublons.
+  let media: Media | null = null;
   const mediaId = m.image?.id ?? m.audio?.id ?? m.document?.id ?? null;
   if (mediaId && (typeDb === "photo" || typeDb === "vocal")) {
     try {
       media = await telechargerMedia(mediaId, msg.id);
-      await sb.from("caisse_messages").update({ media_path: media.path }).eq("id", msg.id);
+      const empreinte = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", media.bytes)));
+      await sb.from("caisse_messages").update({ media_path: media.path, media_hash: empreinte }).eq("id", msg.id);
     } catch (e) {
-      console.error("media", m.id, e);
+      console.error("media", m.id, String(e));
     }
   }
 
   // Vocal : transcription, puis traitement comme un texte. Le vocal reste joint pour l'écoute.
-  let lu = texte;
+  let lu = choixMenu ?? texte;
   if (typeDb === "vocal" && media) {
     try {
       lu = await transcrire(media);
-      console.log("transcription", JSON.stringify({ ok: !!lu, longueur: lu?.length ?? 0 }));
       if (lu) await sb.from("caisse_messages").update({ texte: lu }).eq("id", msg.id);
     } catch (e) {
       console.error("transcription", String(e));
     }
   }
 
-  // Une question en attente (chiffre du projet ou montant) ?
+  // Une question en attente (projet ou montant) ?
   const { data: conv } = await sb.from("caisse_conversations").select("*").eq("ouvrier_id", ouv.id).maybeSingle();
   if (conv) {
     const frais = Date.now() - new Date(conv.maj).getTime() < ETAPE_VALIDITE_MS;
     if (frais && (typeDb === "texte" || typeDb === "vocal") && lu && await repondreEtape(conv, lu, from)) return;
     await sb.from("caisse_conversations").delete().eq("ouvrier_id", ouv.id);
+  }
+
+  // Demandes courtes reconnues sans l'IA : solde, annulation.
+  if ((typeDb === "texte" || typeDb === "vocal") && lu) {
+    if (demandeSolde(lu)) return await envoyerSolde(ouv.id, from);
+    if (demandeAnnulation(lu)) return await annulerDerniere(ouv.id, from);
   }
 
   if (typeDb === "vocal" && !lu) {
@@ -213,6 +238,11 @@ async function traiter(m: any, c: any) {
   }
 
   await nouvelleDepense({ ouvId: ouv.id, msgId: msg.id, from, texte: lu, media, typeDb });
+}
+
+function destDe(ouv: any, tel: string | null, uid: string | null): Dest {
+  const num = String(ouv?.telephone ?? tel ?? "").replace(/\D/g, "");
+  return { to: num || undefined, recipient: (uid ?? ouv?.wa_user_id) || undefined };
 }
 
 // Transcription d'un vocal WhatsApp (ogg/opus) par Groq. Le vocabulaire de la caisse
@@ -245,6 +275,47 @@ async function transcrire(media: { mime: string; bytes: Uint8Array }): Promise<s
   return t || null;
 }
 
+// ---------------------------------------------------------------- Solde et annulation
+
+// Minuscules, sans voyelles arabes ni tatouil, sans ponctuation.
+const normaliser = (s: string) => s.toLowerCase().replace(/[\u064B-\u0652\u0640]/g, "").replace(/[؟?!.,،]/g, " ").replace(/\s+/g, " ").trim();
+const RE_SOLDE = /(شحال عندي|شحال باقي|شحال بقا|شحال فيدي|شحال ف يدي|رصيد|صولد|سولد|الحساب ديالي|حسابي|كم عندي|solde|ch[h7]al (3|a)ndi|ch[h7]al ba9i)/;
+const MOTS_ANNULER = new Set(["غلط", "غالط", "خطأ", "خطا", "الغي", "لغي", "إلغاء", "الغاء", "امسح", "مسح", "❌", "annuler", "annule", "ghalat", "8alat", "khata"]);
+const demandeSolde = (s: string) => RE_SOLDE.test(normaliser(s));
+function demandeAnnulation(s: string) {
+  const mots = normaliser(s).split(" ");
+  if (mots.length > 3) return false; // « غلط » seul, pas une phrase qui le contient
+  return mots.some((w) => MOTS_ANNULER.has(w));
+}
+
+async function envoyerSolde(ouvId: string, from: Dest) {
+  const [{ data: s }, { data: attente }] = await Promise.all([
+    sb.from("caisse_soldes_ouvriers").select("solde").eq("ouvrier_id", ouvId).maybeSingle(),
+    sb.from("caisse_depenses").select("montant").eq("ouvrier_id", ouvId).eq("payeur", "ouvrier").eq("statut", "a_valider"),
+  ]);
+  const solde = Number(s?.solde ?? 0);
+  const enAttente = (attente ?? []).reduce((a: number, d: any) => a + Number(d.montant || 0), 0);
+  const lignes = [solde >= 0 ? `💰 عندك ${fmtMontant(solde)} درهم` : `🔴 الشركة كتسالك ${fmtMontant(-solde)} درهم`];
+  if (enAttente > 0) lignes.push(`⏳ ${fmtMontant(enAttente)} درهم مازال كتسنى التأكيد`);
+  await envoyer(from, lignes.join("\n"));
+}
+
+// Annule les dépenses du dernier message (encore à valider, envoyées il y a moins de 3 h).
+async function annulerDerniere(ouvId: string, from: Dest) {
+  const depuis = new Date(Date.now() - ANNULATION_MS).toISOString();
+  const { data: recentes } = await sb.from("caisse_depenses").select("id, message_id, montant, categorie_id, libelle")
+    .eq("ouvrier_id", ouvId).eq("statut", "a_valider").in("source", ["whatsapp_texte", "whatsapp_photo", "whatsapp_vocal"])
+    .gte("created_at", depuis).order("created_at", { ascending: false });
+  if (!recentes?.length) { await envoyer(from, "🤷 ما كاين حتى مصروف باش يتلغى"); return; }
+  const cible = recentes[0].message_id;
+  const lot = recentes.filter((d: any) => d.message_id === cible);
+  await sb.from("caisse_depenses").update({ statut: "rejetee" }).in("id", lot.map((d: any) => d.id));
+  await sb.from("caisse_conversations").delete().eq("ouvrier_id", ouvId);
+  const categories = await chargerCategories();
+  const quoi = (d: any) => { const c = categories.find((x) => x.id === d.categorie_id); return c ? (c.mots_cles?.[0] ?? c.nom) : (d.libelle || "").slice(0, 30); };
+  await envoyer(from, lot.map((d: any) => `❌ تلغات: ${d.montant != null ? fmtMontant(d.montant) + " درهم – " : ""}${quoi(d)}`).join("\n"));
+}
+
 // ---------------------------------------------------------------- Questions en attente
 
 function chiffresLatins(s: string) {
@@ -267,19 +338,24 @@ async function repondreEtape(conv: any, texte: string, from: Dest): Promise<bool
   const ids: string[] = conv.depense_ids ?? [];
 
   if (conv.etape === "projet") {
-    const choix = /^\d{1,3}$/.test(s) ? s : nombreDit(s); // « 2 », ou « جوج » dit dans un vocal
-    if (!choix) return false; // autre chose : nouveau message
     const options: string[] = conv.options ?? [];
-    const n = Number(choix);
-    if (n < 1 || n > options.length) {
-      await envoyer(from, "❓ هاد الرقم ماكاينش.\n" + await listeProjetsTexte(options));
+    if (s === "menu:autres") { // « مشاريع أخرى » dans le menu : la liste complète en texte
+      await envoyer(from, await listeProjetsTexte(options));
       await sb.from("caisse_conversations").update({ maj: new Date().toISOString() }).eq("ouvrier_id", conv.ouvrier_id);
       return true;
     }
-    const projectId = options[n - 1];
-    const { error } = await sb.from("caisse_depenses").update({ project_id: projectId })
+    const choix = s.startsWith("projet:") ? s.slice(7) : /^\d{1,3}$/.test(s) ? s : nombreDit(s);
+    if (!choix) return false; // autre chose : nouveau message
+    const n = Number(choix);
+    if (!(n >= 1 && n <= options.length)) {
+      await envoyer(from, "❓ هاد الرقم ماكاينش.");
+      await envoyerMenuProjets(options, from);
+      await sb.from("caisse_conversations").update({ maj: new Date().toISOString() }).eq("ouvrier_id", conv.ouvrier_id);
+      return true;
+    }
+    const { error } = await sb.from("caisse_depenses").update({ project_id: options[n - 1] })
       .in("id", ids).eq("statut", "a_valider").is("project_id", null);
-    if (error) console.error("maj projet", error);
+    if (error) console.error("maj projet", error.message);
     await sb.from("caisse_conversations").delete().eq("ouvrier_id", conv.ouvrier_id);
     await envoyerConfirmation(from, ids);
     return true;
@@ -322,7 +398,7 @@ async function demanderProjet(ouvId: string, ids: string[], from: Dest) {
   await sb.from("caisse_conversations").upsert({
     ouvrier_id: ouvId, etape: "projet", depense_ids: ids, options: ordre, maj: new Date().toISOString(),
   });
-  await envoyer(from, await listeProjetsTexte(ordre, projets));
+  await envoyerMenuProjets(ordre, from, projets);
 }
 
 async function demanderMontant(ouvId: string, ids: string[], from: Dest) {
@@ -332,21 +408,45 @@ async function demanderMontant(ouvId: string, ids: string[], from: Dest) {
   await envoyer(from, "💰 شحال؟\nصيفط غير الثمن بالأرقام. مثال: 200");
 }
 
+// Menu WhatsApp à toucher (10 lignes au plus). Au-delà de 10 projets : les 9 premiers
+// puis « مشاريع أخرى », qui envoie la liste complète numérotée. Si le menu ne passe pas,
+// la liste numérotée en texte prend le relais.
+const court = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+async function envoyerMenuProjets(ordre: string[], from: Dest, projets?: Projet[]) {
+  const ps = projets ?? await chargerProjets();
+  const trop = ordre.length > 10;
+  const rows: any[] = ordre.slice(0, trop ? 9 : 10).map((id, i) => {
+    const p = ps.find((x) => x.id === id);
+    const nomLong = (p?.name ?? "").trim();
+    const desc = [p?.nom_court && nomLong && p.nom_court.trim() !== nomLong ? nomLong : "", (p?.client ?? "").trim()].filter(Boolean).join(" · ");
+    return { id: `projet:${i + 1}`, title: court(nomProjet(p), 24), ...(desc ? { description: court(desc, 72) } : {}) };
+  });
+  if (trop) rows.push({ id: "menu:autres", title: "📋 مشاريع أخرى" });
+  const r = await envoyerPayload(from, {
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: { text: "📁 شمن مشروع؟" },
+      action: { button: "اختار المشروع", sections: [{ title: "المشاريع", rows }] },
+    },
+  });
+  if (!r.ok && r.code !== HORS_FENETRE) await envoyer(from, await listeProjetsTexte(ordre, ps));
+}
+
 const KEYCAPS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
 async function listeProjetsTexte(ordre: string[], projets?: Projet[]) {
   const ps = projets ?? await chargerProjets();
   const nom = (id: string) => nomProjet(ps.find((p) => p.id === id));
-  // \u200E (marque gauche-à-droite) en tête de ligne : WhatsApp aligne alors chaque projet
-  // à gauche, même quand son nom est en arabe (sinon il le met à droite).
+  // LRM en tête de ligne : WhatsApp aligne alors chaque projet à gauche,
+  // même quand son nom est en arabe (sinon il le met à droite).
   return "📁 شمن مشروع؟ صيفط غير الرقم:\n" +
-    ordre.map((id, i) => `\u200E${KEYCAPS[i] ?? (i + 1) + "."} ${nom(id)}`).join("\n");
+    ordre.map((id, i) => `${LRM}${KEYCAPS[i] ?? (i + 1) + "."} ${nom(id)}`).join("\n");
 }
 
 // ---------------------------------------------------------------- Nouvelle dépense
 
 async function nouvelleDepense(o: {
-  ouvId: string; msgId: string; from: Dest; texte: string | null;
-  media: { path: string; mime: string; bytes: Uint8Array } | null; typeDb: string;
+  ouvId: string; msgId: string; from: Dest; texte: string | null; media: Media | null; typeDb: string;
 }) {
   const [projets, categories] = await Promise.all([chargerProjets(), chargerCategories()]);
   const source = o.typeDb === "photo" ? "whatsapp_photo" : o.typeDb === "vocal" ? "whatsapp_vocal" : "whatsapp_texte";
@@ -360,8 +460,11 @@ async function nouvelleDepense(o: {
     erreur = String((e as Error)?.message ?? e);
     console.error("analyse", erreur);
   }
-  console.log("analyse", JSON.stringify({ ok: !!analyse, depense: analyse?.est_depense ?? null, lignes: analyse?.depenses.length ?? 0, erreur }));
   await sb.from("caisse_messages").update({ analyse_ia: analyse ?? { erreur } }).eq("id", o.msgId);
+
+  // Demandes comprises par l'IA (formulations que les mots-clés n'ont pas reconnues).
+  if (analyse && o.typeDb !== "photo" && analyse.demande === "solde") return await envoyerSolde(o.ouvId, o.from);
+  if (analyse && o.typeDb !== "photo" && analyse.demande === "annuler") return await annulerDerniere(o.ouvId, o.from);
 
   // L'IA n'a pas pu lire : la ligne part quand même à valider, le gestionnaire complète.
   if (!analyse) {
@@ -392,7 +495,7 @@ async function nouvelleDepense(o: {
       if (data) await demanderMontant(o.ouvId, [data.id], o.from);
       return;
     }
-    await envoyer(o.from, "👋 صيفط المصروف: الشي والثمن.\nمثال: مزوط 200");
+    await envoyer(o.from, "👋 صيفط المصروف: الشي والثمن.\nمثال: مزوط 200\n💰 باش تعرف شحال عندك: شحال عندي");
     return;
   }
 
@@ -412,7 +515,7 @@ async function nouvelleDepense(o: {
 
   const { data: crees, error } = await sb.from("caisse_depenses").insert(lignes).select("id, montant, project_id");
   if (error || !crees?.length) {
-    console.error("insert depense", error);
+    console.error("insert depense", error?.message);
     await envoyer(o.from, "✅ توصلنا");
     return;
   }
@@ -435,6 +538,7 @@ function dateValide(d: string, aujourdhui: string) {
 // ---------------------------------------------------------------- IA
 
 type Analyse = {
+  demande: "depense" | "solde" | "annuler" | "autre";
   est_depense: boolean;
   depenses: { montant: number; categorie: string; libelle: string; date: string }[];
   projet_id: string;
@@ -444,8 +548,9 @@ const SYSTEME = `Tu lis les messages WhatsApp envoyés par des intervenants d'un
 Les messages sont en darija (lettres arabes ou latines), en arabe ou en français, souvent courts et avec des fautes. Une photo est en général un ticket de caisse ou une facture.
 
 Appelle toujours l'outil enregistrer_depense, une seule fois, avec ce que tu as compris :
-- est_depense : false si le message ne déclare aucune dépense (salutation, question, photo sans rapport).
-- depenses : une ligne par dépense. Si le message en contient plusieurs (« مزوط 200 و الماكلة 50 »), fais plusieurs lignes.
+- demande : "depense" si le message déclare une ou plusieurs dépenses ; "solde" si l'intervenant demande combien d'argent il lui reste de la caisse ; "annuler" s'il veut annuler ou corriger la dépense qu'il vient d'envoyer ; "autre" sinon (salutation, question, photo sans rapport).
+- est_depense : true seulement si demande vaut "depense".
+- depenses : une ligne par dépense. Si le message en contient plusieurs (« مزوط 200 و الماكلة 50 »), fais plusieurs lignes. Vide si ce n'est pas une dépense.
   - montant : le total payé en dirhams pour cette ligne. Pour un ticket, prends le TOTAL TTC. Mets 0 si le montant n'est pas écrit ou pas sûr. Ne devine jamais un montant.
   - categorie : exactement un nom de la liste des catégories, ou "" si aucune ne convient.
   - libelle : une description courte, reprise des mots de l'intervenant (garde l'arabe tel quel) ou du fournisseur sur le ticket.
@@ -461,6 +566,7 @@ const OUTIL = {
   input_schema: {
     type: "object",
     properties: {
+      demande: { type: "string", enum: ["depense", "solde", "annuler", "autre"] },
       est_depense: { type: "boolean" },
       depenses: {
         type: "array",
@@ -478,7 +584,7 @@ const OUTIL = {
       },
       projet_id: { type: "string" },
     },
-    required: ["est_depense", "depenses", "projet_id"],
+    required: ["demande", "est_depense", "depenses", "projet_id"],
     additionalProperties: false,
   },
 };
@@ -532,7 +638,9 @@ ${categories.map((c) => `${c.nom} : ${(c.mots_cles ?? []).join("، ")}`).join("\
   if (typeof i.est_depense !== "boolean" || !Array.isArray(i.depenses) || typeof i.projet_id !== "string") {
     throw new Error("réponse IA invalide");
   }
+  const demande = ["depense", "solde", "annuler", "autre"].includes(i.demande) ? i.demande : (i.est_depense ? "depense" : "autre");
   return {
+    demande,
     est_depense: i.est_depense,
     projet_id: i.projet_id,
     depenses: i.depenses.filter((d: any) => d && typeof d === "object").map((d: any) => ({
@@ -573,16 +681,77 @@ async function envoyerConfirmation(from: Dest, ids: string[]) {
     const mt = d.montant != null ? `${fmtMontant(d.montant)} درهم` : "؟ درهم";
     return `✅ ${mt} – ${quoi}${p ? " – " + nomProjet(p) : ""}`;
   });
-  await envoyer(from, lignes.join("\n") || "✅ توصلنا");
+  await envoyer(from, (lignes.join("\n") || "✅ توصلنا") + "\n↩️ غلط؟ صيفط: غلط");
 }
 function fmtMontant(n: number) {
   const v = Number(n);
   return Number.isInteger(v) ? String(v) : v.toFixed(2);
 }
 
+// ---------------------------------------------------------------- Avis envoyés depuis la caisse
+
+// POST ?action=notifier  { type: "avance" | "rejet", id }
+// Appelé par la page caisse juste après l'enregistrement d'une avance ou le refus d'une dépense.
+async function notifier(req: Request): Promise<Response> {
+  const auth = req.headers.get("authorization") ?? "";
+  if (!auth.startsWith("Bearer ")) return json({ ok: false, raison: "non_connecte" }, 401);
+  const userSb = createClient(SUPA_URL, env("SUPABASE_ANON_KEY"), {
+    global: { headers: { Authorization: auth } }, auth: { persistSession: false },
+  });
+  const { data: niveau } = await userSb.rpc("caisse_mon_acces");
+  if (niveau !== "super" && niveau !== "gestionnaire") return json({ ok: false, raison: "interdit" }, 403);
+
+  let corps: any;
+  try { corps = await req.json(); } catch { return json({ ok: false, raison: "requete" }, 400); }
+  const { type, id } = corps ?? {};
+  if (!id || (type !== "avance" && type !== "rejet")) return json({ ok: false, raison: "requete" }, 400);
+
+  let ouvId: string | null = null, texte = "", tpl = "", params: string[] = [];
+  if (type === "avance") {
+    const { data: a } = await sb.from("caisse_avances").select("ouvrier_id, montant, project_id").eq("id", id).maybeSingle();
+    if (!a) return json({ ok: false, raison: "introuvable" }, 404);
+    ouvId = a.ouvrier_id;
+    let projet = "";
+    if (a.project_id) {
+      const p = (await chargerProjets().catch(() => [] as Projet[])).find((x) => x.id === a.project_id);
+      projet = p ? nomProjet(p) : ((await sb.from("projects").select("name").eq("id", a.project_id).maybeSingle()).data?.name ?? "").trim();
+    }
+    const { data: s } = await sb.from("caisse_soldes_ouvriers").select("solde").eq("ouvrier_id", a.ouvrier_id).maybeSingle();
+    texte = `💵 توصلتي ب ${fmtMontant(a.montant)} درهم${projet ? " – " + projet : ""}` +
+      (s ? `\n💰 عندك دابا ${fmtMontant(Number(s.solde))} درهم` : "");
+    tpl = TPL_AVANCE; params = [fmtMontant(a.montant), projet || "-"];
+  } else {
+    const { data: d } = await sb.from("caisse_depenses").select("ouvrier_id, montant, categorie_id, libelle, payeur, statut").eq("id", id).maybeSingle();
+    if (!d) return json({ ok: false, raison: "introuvable" }, 404);
+    if (d.payeur !== "ouvrier" || d.statut !== "rejetee" || !d.ouvrier_id) return json({ ok: false, raison: "sans_objet" });
+    ouvId = d.ouvrier_id;
+    const c = (await chargerCategories()).find((x) => x.id === d.categorie_id);
+    const quoi = c ? (c.mots_cles?.[0] ?? c.nom) : (d.libelle || "").slice(0, 40);
+    texte = `❌ ما تقبلش: ${d.montant != null ? fmtMontant(d.montant) + " درهم – " : ""}${quoi}\n📞 تواصل مع المسؤول`;
+    tpl = TPL_REJET; params = [d.montant != null ? fmtMontant(d.montant) : "-", quoi || "-"];
+  }
+
+  const { data: ouv } = await sb.from("caisse_ouvriers").select("telephone, wa_user_id").eq("id", ouvId).maybeSingle();
+  if (!ouv || (!ouv.telephone && !ouv.wa_user_id)) return json({ ok: false, raison: "sans_numero" });
+  const dest = destDe(ouv, null, null);
+
+  // Texte libre (gratuit) si l'intervenant a écrit au bot dans les dernières 24 h ;
+  // sinon Meta exige un modèle approuvé, utilisé s'il est configuré.
+  const r = await envoyer(dest, texte);
+  if (r.ok) return json({ ok: true });
+  if (r.code === HORS_FENETRE && tpl) {
+    const t = await envoyerPayload(dest, {
+      type: "template",
+      template: { name: tpl, language: { code: TPL_LANGUE }, components: [{ type: "body", parameters: params.map((x) => ({ type: "text", text: x })) }] },
+    });
+    return json(t.ok ? { ok: true, modele: true } : { ok: false, raison: "modele_refuse" });
+  }
+  return json({ ok: false, raison: r.code === HORS_FENETRE ? "hors_fenetre" : "envoi" });
+}
+
 // ---------------------------------------------------------------- WhatsApp
 
-async function telechargerMedia(mediaId: string, msgId: string) {
+async function telechargerMedia(mediaId: string, msgId: string): Promise<Media> {
   if (!WA_TOKEN) throw new Error("WHATSAPP_TOKEN manquant");
   const infoRep = await fetch(`${GRAPH}/${encodeURIComponent(mediaId)}`, { headers: { Authorization: `Bearer ${WA_TOKEN}` } });
   if (!infoRep.ok) throw new Error("media info " + infoRep.status);
@@ -605,17 +774,24 @@ async function telechargerMedia(mediaId: string, msgId: string) {
   return { path, mime, bytes };
 }
 
-async function envoyer(dest: Dest, texte: string) {
-  if (!WA_TOKEN || !WA_PHONE_ID) { console.warn("réponse non envoyée (secrets WhatsApp manquants)"); return; }
-  // D'abord le numéro (to) s'il est connu, puis l'identifiant WhatsApp (recipient) si l'envoi échoue.
+const envoyer = (dest: Dest, texte: string) => envoyerPayload(dest, { type: "text", text: { body: texte } });
+
+// D'abord le numéro (to) s'il est connu, puis l'identifiant WhatsApp (recipient) si l'envoi échoue.
+async function envoyerPayload(dest: Dest, contenu: object): Promise<{ ok: boolean; code?: number }> {
+  if (!WA_TOKEN || !WA_PHONE_ID) { console.warn("réponse non envoyée (secrets WhatsApp manquants)"); return { ok: false }; }
   const cibles = [dest.to ? { to: dest.to } : null, dest.recipient ? { recipient: dest.recipient } : null].filter(Boolean) as object[];
+  let code: number | undefined;
   for (const cible of cibles) {
     const r = await fetch(`${GRAPH}/${WA_PHONE_ID}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", ...cible, type: "text", text: { body: texte } }),
+      body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", ...cible, ...contenu }),
     });
-    if (r.ok) { console.log("réponse envoyée", Object.keys(cible)[0]); return; }
-    console.error("envoi WhatsApp", Object.keys(cible)[0], r.status, await r.text());
+    if (r.ok) return { ok: true };
+    const corps = await r.text();
+    try { code = JSON.parse(corps)?.error?.code; } catch { /* corps non JSON */ }
+    console.error("envoi WhatsApp", Object.keys(cible)[0], r.status, corps.slice(0, 300));
+    if (code === HORS_FENETRE) break; // même règle pour le numéro et l'identifiant
   }
+  return { ok: false, code };
 }
