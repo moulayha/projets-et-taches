@@ -245,7 +245,17 @@ async function loadAll(){
   if(isSuper()){
     S.acces = await q(sb.from('caisse_acces').select('*'));
     S.users = await q(sb.from('app_users').select('id,role'));
-  }
+    // Messages WhatsApp d'expéditeurs non reconnus (30 derniers jours), regroupés par expéditeur.
+    const depuis = new Date(Date.now() - 30 * 864e5).toISOString();
+    const inconnus = await q(sb.from('caisse_messages').select('id,recu_le,telephone,wa_user_id,profil_nom,texte,type')
+      .is('ouvrier_id', null).gte('recu_le', depuis).order('recu_le', {ascending:false}).limit(200));
+    const parCle = new Map();
+    inconnus.forEach(m => { const k = m.wa_user_id || m.telephone; if(!k) return;
+      const g = parCle.get(k) || {cle:k, wa_user_id:m.wa_user_id, telephone:m.telephone, profil_nom:m.profil_nom, dernier:m, ids:[], nb:0};
+      g.ids.push(m.id); g.nb++; if(!g.profil_nom && m.profil_nom) g.profil_nom = m.profil_nom; if(!g.telephone && m.telephone) g.telephone = m.telephone;
+      parCle.set(k, g); });
+    S.inconnus = [...parCle.values()];
+  } else S.inconnus = [];
 }
 let reloadTimer = null;
 function scheduleReload(){ clearTimeout(reloadTimer); reloadTimer = setTimeout(refresh, 400); }
@@ -392,8 +402,41 @@ function viewOuvriers(){
   ${S.ouvriers.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Nom</th><th>Téléphone WhatsApp</th><th>État</th><th class="num">Solde en main</th><th>Note</th></tr></thead><tbody>
   ${S.ouvriers.map(o => { const s = so.get(o.id) || {}; return `<tr class="${isSuper() ? 'row' : ''}" ${isSuper() ? `data-edit="ouvrier:${esc(o.id)}"` : ''}><td>${esc(o.nom)}</td><td class="mono">${esc(o.telephone || '—')}</td>
     <td>${o.actif ? '<span class="pill p-ok">Actif</span>' : '<span class="pill p-gray">Inactif</span>'}</td><td class="num ${Number(s.solde) < 0 ? 'neg' : ''}">${dh(s.solde)}</td><td class="muted">${esc(o.note)}</td></tr>`; }).join('')}
-  </tbody></table></div><p class="muted small">Le bot WhatsApp ne reconnaît que les numéros enregistrés ici, au format international (+212…).${isSuper() ? '' : ' Seul un super admin peut ajouter ou modifier un intervenant.'}</p>`
-  : `<div class="empty">Aucun intervenant enregistré.${isSuper() ? ' Ajoute ton équipe avec « + Intervenant ».' : ''}</div>`}`;
+  </tbody></table></div><p class="muted small">Le bot WhatsApp reconnaît les numéros enregistrés ici, au format international (+212…), et les contacts associés ci-dessous.${isSuper() ? '' : ' Seul un super admin peut ajouter ou modifier un intervenant.'}</p>`
+  : `<div class="empty">Aucun intervenant enregistré.${isSuper() ? ' Ajoute ton équipe avec « + Intervenant ».' : ''}</div>`}
+  ${viewInconnus()}`;
+}
+
+// Expéditeurs WhatsApp non reconnus : souvent un intervenant dont WhatsApp masque le numéro
+// (nom d'utilisateur activé). On l'associe une fois, le bot le reconnaît ensuite.
+function viewInconnus(){
+  if(!isSuper() || !(S.inconnus || []).length) return '';
+  const actifs = S.ouvriers.filter(o => o.actif);
+  return `<div class="setcard" style="margin-top:18px"><h3>Contacts WhatsApp non reconnus <span class="muted small">${S.inconnus.length}</span></h3>
+    <p class="muted small">Ces personnes ont écrit au bot, qui ne les a pas reconnues : il ne leur a pas répondu. Si c’est un intervenant, associe-le : le bot le reconnaîtra à partir de son prochain message.</p>
+    <div class="tscroll"><table class="grid"><thead><tr><th>Nom WhatsApp</th><th>Numéro</th><th>Dernier message</th><th>Associer à</th><th></th></tr></thead><tbody>
+    ${S.inconnus.map(g => `<tr data-inconnu="${esc(g.cle)}"><td>${esc(g.profil_nom || '—')}</td>
+      <td class="mono">${g.telephone ? esc(g.telephone) : '<span class="muted">masqué</span>'}</td>
+      <td dir="auto">${esc((g.dernier.texte || ({photo:'📷 Photo', vocal:'🎤 Vocal'}[g.dernier.type] || '—')).slice(0, 60))}<div class="muted small">${fmtDate(g.dernier.recu_le.slice(0, 10))}${g.nb > 1 ? ` · ${g.nb} messages` : ''}</div></td>
+      <td><select data-lier-ouv aria-label="Intervenant"><option value="">— Intervenant —</option>${actifs.map(o => `<option value="${esc(o.id)}">${esc(o.nom)}</option>`).join('')}</select></td>
+      <td><button class="btn sm primary" type="button" data-lier>Associer</button></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+async function lierInconnu(row){
+  const g = (S.inconnus || []).find(x => x.cle === row.dataset.inconnu); if(!g) return;
+  const ouvId = row.querySelector('[data-lier-ouv]').value;
+  if(!ouvId){ setSync('Choisis l’intervenant à associer.', true); return; }
+  const o = S.ouvriers.find(x => x.id === ouvId); if(!o) return;
+  const patch = {};
+  if(g.wa_user_id) patch.wa_user_id = g.wa_user_id;
+  if(g.telephone && !o.telephone) patch.telephone = g.telephone;
+  if(g.telephone && o.telephone && o.telephone !== g.telephone && !g.wa_user_id){
+    setSync(`${o.nom} a déjà le numéro ${o.telephone}. Modifie d’abord sa fiche si son numéro a changé.`, true); return; }
+  if(o.wa_user_id && g.wa_user_id && o.wa_user_id !== g.wa_user_id && !confirm(`${o.nom} est déjà associé à un autre compte WhatsApp. Le remplacer par celui-ci ?`)) return;
+  const r1 = await S.sb.from('caisse_ouvriers').update(patch).eq('id', ouvId);
+  if(r1.error){ setSync(r1.error.code === '23505' ? 'Ce contact WhatsApp est déjà associé à un autre intervenant.' : 'L’association a échoué. ' + friendly(r1.error), true); return; }
+  await run(S.sb.from('caisse_messages').update({ouvrier_id:ouvId}).in('id', g.ids),
+    `${o.nom} est associé. Demande-lui de renvoyer son dernier message : le bot lui répondra.`);
 }
 
 function viewReglages(){
@@ -448,6 +491,7 @@ function bindView(){
   v.onclick = async e => {
     const t = e.target;
     const go = t.closest('[data-goto]'); if(go){ setTab(go.dataset.goto); return; }
+    const li = t.closest('[data-lier]'); if(li){ li.disabled = true; await lierInconnu(li.closest('tr')); li.disabled = false; return; }
     const nw = t.closest('[data-new]'); if(nw){ openForm(nw.dataset.new); return; }
     const j = t.closest('[data-justif]'); if(j){ openJustif(j.dataset.justif); return; }
     const pm = t.closest('[data-projmvt]'); if(pm){ S.f = {...S.f, projet:pm.dataset.projmvt, du:'', au:''}; setTab('mvt'); return; }

@@ -73,7 +73,12 @@ Deno.serve(async (req) => {
       const ignore = WA_PHONE_ID !== "" && pid !== "" && pid !== WA_PHONE_ID;
       resume.push({ champ: change?.field, pid, messages: v?.messages?.length ?? 0, statuts: v?.statuses?.length ?? 0, ignore });
       if (ignore) continue;
-      for (const m of v?.messages ?? []) messages.push(m);
+      const contacts: any[] = v?.contacts ?? [];
+      for (const m of v?.messages ?? []) {
+        // Le contact qui correspond au message : numéro (wa_id) et/ou identifiant WhatsApp (user_id).
+        const c = contacts.find((x) => (m.from_user_id && x?.user_id === m.from_user_id) || (m.from && x?.wa_id === m.from)) ?? contacts[0];
+        messages.push({ m, c });
+      }
     }
   }
   // Journal sans contenu : utile pour comprendre un message ignoré.
@@ -81,8 +86,8 @@ Deno.serve(async (req) => {
 
   // Traitement avant de répondre (quelques secondes). Si Meta renvoie le même
   // message entre-temps, wa_message_id unique évite le doublon.
-  for (const m of messages) {
-    try { await traiter(m); } catch (e) { console.error("traitement en erreur", m?.id, JSON.stringify(e), String(e)); }
+  for (const { m, c } of messages) {
+    try { await traiter(m, c); } catch (e) { console.error("traitement en erreur", m?.id, JSON.stringify(e), String(e)); }
   }
   return new Response("ok", { status: 200 });
 });
@@ -106,10 +111,16 @@ async function signatureOk(raw: string, header: string | null): Promise<boolean>
 type Projet = { id: string; code: string | null; name: string | null; client: string | null; nom_court: string | null };
 type Categorie = { id: string; nom: string; mots_cles: string[]; icone: string };
 
-async function traiter(m: any) {
-  const from = String(m?.from ?? "").replace(/\D/g, "");
-  if (!from || !m?.id) return;
-  const tel = "+" + from;
+// Destinataire d'une réponse : le numéro si on le connaît (recommandé par Meta,
+// cela garde les numéros dans les webhooks suivants), sinon l'identifiant WhatsApp.
+type Dest = { to?: string; recipient?: string };
+
+async function traiter(m: any, c: any) {
+  const numero = String(m?.from ?? c?.wa_id ?? "").replace(/\D/g, "");
+  const uid: string | null = m?.from_user_id ?? c?.user_id ?? null;
+  const profil: string | null = c?.profile?.name ?? null;
+  if ((!numero && !uid) || !m?.id) { console.warn("message sans expéditeur ou sans id"); return; }
+  const tel = numero ? "+" + numero : null;
   const t = m.type;
 
   const typeDb = t === "text" || t === "interactive" || t === "button" ? "texte"
@@ -125,20 +136,31 @@ async function traiter(m: any) {
     : null) ?? null;
   const recuLe = m.timestamp ? new Date(Number(m.timestamp) * 1000).toISOString() : new Date().toISOString();
 
-  const { data: ouv, error: errOuv } = await sb.from("caisse_ouvriers").select("id, nom, actif").eq("telephone", tel).maybeSingle();
-  console.log("traiter", JSON.stringify({ type: t, fin: tel.slice(-4), intervenant: !!ouv, errOuv: errOuv?.message ?? null }));
+  // L'intervenant : par son numéro, sinon par son identifiant WhatsApp.
+  let ouv: any = null;
+  if (tel) ouv = (await sb.from("caisse_ouvriers").select("id, nom, actif, telephone, wa_user_id").eq("telephone", tel).maybeSingle()).data;
+  if (!ouv && uid) ouv = (await sb.from("caisse_ouvriers").select("id, nom, actif, telephone, wa_user_id").eq("wa_user_id", uid).maybeSingle()).data;
+  // Reconnu par son numéro : on retient son identifiant pour le jour où le numéro manquera.
+  if (ouv && uid && ouv.wa_user_id !== uid) {
+    const { error: e } = await sb.from("caisse_ouvriers").update({ wa_user_id: uid }).eq("id", ouv.id);
+    if (e) console.warn("identifiant non enregistré", e.message);
+  }
+  console.log("traiter", JSON.stringify({ type: t, numero: !!tel, identifiant: !!uid, intervenant: !!ouv }));
 
   // Message brut, une seule fois (Meta peut renvoyer le même message).
   const { data: msg, error } = await sb.from("caisse_messages")
-    .insert({ telephone: tel, ouvrier_id: ouv?.id ?? null, type: typeDb, texte, wa_message_id: m.id, recu_le: recuLe })
+    .insert({ telephone: tel, wa_user_id: uid, profil_nom: profil, ouvrier_id: ouv?.id ?? null, type: typeDb, texte, wa_message_id: m.id, recu_le: recuLe })
     .select("id").single();
   if (error) {
     if (error.code === "23505") { console.log("déjà reçu"); return; }
     throw error;
   }
 
-  // Numéro inconnu ou intervenant désactivé : on garde la trace, sans répondre.
+  // Expéditeur inconnu ou intervenant désactivé : on garde la trace, sans répondre.
+  // Le gestionnaire peut l'associer à un intervenant dans Caisse → Intervenants.
   if (!ouv || !ouv.actif) return;
+  const numConnu = String(ouv.telephone ?? tel ?? "").replace(/\D/g, "");
+  const from: Dest = { to: numConnu || undefined, recipient: uid ?? undefined };
 
   // Fichier joint (photo, ticket PDF, vocal) → stockage privé.
   let media: { path: string; mime: string; bytes: Uint8Array } | null = null;
@@ -183,7 +205,7 @@ function chiffresLatins(s: string) {
   return s.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0));
 }
 
-async function repondreEtape(conv: any, texte: string, from: string): Promise<boolean> {
+async function repondreEtape(conv: any, texte: string, from: Dest): Promise<boolean> {
   const s = chiffresLatins(texte).trim();
   const ids: string[] = conv.depense_ids ?? [];
 
@@ -222,7 +244,7 @@ async function repondreEtape(conv: any, texte: string, from: string): Promise<bo
   return false;
 }
 
-async function demanderProjet(ouvId: string, ids: string[], from: string) {
+async function demanderProjet(ouvId: string, ids: string[], from: Dest) {
   const projets = await chargerProjets();
   // Le dernier projet utilisé par cet intervenant passe en premier.
   const { data: dernier } = await sb.from("caisse_depenses").select("project_id")
@@ -244,7 +266,7 @@ async function demanderProjet(ouvId: string, ids: string[], from: string) {
   await envoyer(from, await listeProjetsTexte(ordre, projets));
 }
 
-async function demanderMontant(ouvId: string, ids: string[], from: string) {
+async function demanderMontant(ouvId: string, ids: string[], from: Dest) {
   await sb.from("caisse_conversations").upsert({
     ouvrier_id: ouvId, etape: "montant", depense_ids: ids, options: [], maj: new Date().toISOString(),
   });
@@ -262,7 +284,7 @@ async function listeProjetsTexte(ordre: string[], projets?: Projet[]) {
 // ---------------------------------------------------------------- Nouvelle dépense
 
 async function nouvelleDepense(o: {
-  ouvId: string; msgId: string; from: string; texte: string | null;
+  ouvId: string; msgId: string; from: Dest; texte: string | null;
   media: { path: string; mime: string; bytes: Uint8Array } | null; typeDb: string;
 }) {
   const [projets, categories] = await Promise.all([chargerProjets(), chargerCategories()]);
@@ -464,7 +486,7 @@ function nomProjet(p?: Projet | null) {
   return ((p?.nom_court || p?.name || "Projet") as string).trim();
 }
 
-async function envoyerConfirmation(from: string, ids: string[]) {
+async function envoyerConfirmation(from: Dest, ids: string[]) {
   const [{ data: deps }, projets, categories] = await Promise.all([
     sb.from("caisse_depenses").select("montant, project_id, categorie_id, libelle").in("id", ids),
     chargerProjets(),
@@ -509,13 +531,17 @@ async function telechargerMedia(mediaId: string, msgId: string) {
   return { path, mime, bytes };
 }
 
-async function envoyer(to: string, texte: string) {
-  if (!WA_TOKEN || !WA_PHONE_ID) { console.warn("réponse non envoyée (secrets WhatsApp manquants) :", texte); return; }
-  const r = await fetch(`${GRAPH}/${WA_PHONE_ID}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: texte } }),
-  });
-  if (!r.ok) console.error("envoi WhatsApp", r.status, await r.text());
-  else console.log("réponse envoyée");
+async function envoyer(dest: Dest, texte: string) {
+  if (!WA_TOKEN || !WA_PHONE_ID) { console.warn("réponse non envoyée (secrets WhatsApp manquants)"); return; }
+  // D'abord le numéro (to) s'il est connu, puis l'identifiant WhatsApp (recipient) si l'envoi échoue.
+  const cibles = [dest.to ? { to: dest.to } : null, dest.recipient ? { recipient: dest.recipient } : null].filter(Boolean) as object[];
+  for (const cible of cibles) {
+    const r = await fetch(`${GRAPH}/${WA_PHONE_ID}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", ...cible, type: "text", text: { body: texte } }),
+    });
+    if (r.ok) { console.log("réponse envoyée", Object.keys(cible)[0]); return; }
+    console.error("envoi WhatsApp", Object.keys(cible)[0], r.status, await r.text());
+  }
 }
