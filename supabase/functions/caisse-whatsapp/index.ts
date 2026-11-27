@@ -3,7 +3,7 @@
 // Meta (WhatsApp Cloud API) appelle cette fonction pour chaque message reçu.
 //  - GET  : vérification du webhook (hub.challenge).
 //  - POST : messages. La signature X-Hub-Signature-256 est vérifiée, puis on
-//           répond 200 tout de suite et le traitement continue en arrière-plan.
+//           traite le message, puis répond 200.
 //
 // Secrets attendus (Supabase → Edge Functions → Secrets) :
 //   WHATSAPP_TOKEN            jeton d'accès permanent (utilisateur système Meta)
@@ -22,7 +22,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
 
-const env = (k: string) => Deno.env.get(k) ?? "";
+// trim : un espace collé par erreur avec un secret ne doit pas tout bloquer.
+const env = (k: string) => (Deno.env.get(k) ?? "").trim();
 const WA_TOKEN = env("WHATSAPP_TOKEN");
 const WA_PHONE_ID = env("WHATSAPP_PHONE_NUMBER_ID");
 const WA_APP_SECRET = env("WHATSAPP_APP_SECRET");
@@ -64,21 +65,25 @@ Deno.serve(async (req) => {
   try { body = JSON.parse(raw); } catch { return new Response("bad json", { status: 400 }); }
 
   const messages: any[] = [];
+  const resume: any[] = [];
   for (const entry of body?.entry ?? []) {
     for (const change of entry?.changes ?? []) {
       const v = change?.value;
-      if (WA_PHONE_ID && v?.metadata?.phone_number_id && v.metadata.phone_number_id !== WA_PHONE_ID) continue;
+      const pid = String(v?.metadata?.phone_number_id ?? "");
+      const ignore = WA_PHONE_ID !== "" && pid !== "" && pid !== WA_PHONE_ID;
+      resume.push({ champ: change?.field, pid, messages: v?.messages?.length ?? 0, statuts: v?.statuses?.length ?? 0, ignore });
+      if (ignore) continue;
       for (const m of v?.messages ?? []) messages.push(m);
     }
   }
+  // Journal sans contenu : utile pour comprendre un message ignoré.
+  console.log("webhook", JSON.stringify({ objet: body?.object, resume, pidConfigure: WA_PHONE_ID.length }));
 
-  const travail = (async () => {
-    for (const m of messages) {
-      try { await traiter(m); } catch (e) { console.error("traitement", m?.id, e); }
-    }
-  })();
-  // @ts-ignore EdgeRuntime est fourni par Supabase
-  EdgeRuntime.waitUntil(travail);
+  // Traitement avant de répondre (quelques secondes). Si Meta renvoie le même
+  // message entre-temps, wa_message_id unique évite le doublon.
+  for (const m of messages) {
+    try { await traiter(m); } catch (e) { console.error("traitement en erreur", m?.id, JSON.stringify(e), String(e)); }
+  }
   return new Response("ok", { status: 200 });
 });
 
@@ -120,14 +125,15 @@ async function traiter(m: any) {
     : null) ?? null;
   const recuLe = m.timestamp ? new Date(Number(m.timestamp) * 1000).toISOString() : new Date().toISOString();
 
-  const { data: ouv } = await sb.from("caisse_ouvriers").select("id, nom, actif").eq("telephone", tel).maybeSingle();
+  const { data: ouv, error: errOuv } = await sb.from("caisse_ouvriers").select("id, nom, actif").eq("telephone", tel).maybeSingle();
+  console.log("traiter", JSON.stringify({ type: t, fin: tel.slice(-4), intervenant: !!ouv, errOuv: errOuv?.message ?? null }));
 
   // Message brut, une seule fois (Meta peut renvoyer le même message).
   const { data: msg, error } = await sb.from("caisse_messages")
     .insert({ telephone: tel, ouvrier_id: ouv?.id ?? null, type: typeDb, texte, wa_message_id: m.id, recu_le: recuLe })
     .select("id").single();
   if (error) {
-    if (error.code === "23505") return; // déjà reçu
+    if (error.code === "23505") { console.log("déjà reçu"); return; }
     throw error;
   }
 
@@ -271,6 +277,7 @@ async function nouvelleDepense(o: {
     erreur = String((e as Error)?.message ?? e);
     console.error("analyse", erreur);
   }
+  console.log("analyse", JSON.stringify({ ok: !!analyse, depense: analyse?.est_depense ?? null, lignes: analyse?.depenses.length ?? 0, erreur }));
   await sb.from("caisse_messages").update({ analyse_ia: analyse ?? { erreur } }).eq("id", o.msgId);
 
   // L'IA n'a pas pu lire : la ligne part quand même à valider, le gestionnaire complète.
@@ -510,4 +517,5 @@ async function envoyer(to: string, texte: string) {
     body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: texte } }),
   });
   if (!r.ok) console.error("envoi WhatsApp", r.status, await r.text());
+  else console.log("réponse envoyée");
 }
