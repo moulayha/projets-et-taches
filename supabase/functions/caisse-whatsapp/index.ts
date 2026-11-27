@@ -336,10 +336,10 @@ const KEYCAPS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣
 async function listeProjetsTexte(ordre: string[], projets?: Projet[]) {
   const ps = projets ?? await chargerProjets();
   const nom = (id: string) => nomProjet(ps.find((p) => p.id === id));
-  // 200E (marque gauche-à-droite) en tête de ligne : WhatsApp aligne alors chaque projet
+  // \u200E (marque gauche-à-droite) en tête de ligne : WhatsApp aligne alors chaque projet
   // à gauche, même quand son nom est en arabe (sinon il le met à droite).
   return "📁 شمن مشروع؟ صيفط غير الرقم:\n" +
-    ordre.map((id, i) => `200E${KEYCAPS[i] ?? (i + 1) + "."} ${nom(id)}`).join("\n");
+    ordre.map((id, i) => `\u200E${KEYCAPS[i] ?? (i + 1) + "."} ${nom(id)}`).join("\n");
 }
 
 // ---------------------------------------------------------------- Nouvelle dépense
