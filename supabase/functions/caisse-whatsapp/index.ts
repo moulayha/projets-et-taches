@@ -96,6 +96,13 @@ Deno.serve(async (req) => {
       const v = change?.value;
       const pid = String(v?.metadata?.phone_number_id ?? "");
       if (WA_PHONE_ID && pid && pid !== WA_PHONE_ID) continue; // autre numéro du portefeuille
+      // Accusés de livraison : Meta accepte l'envoi puis signale ici un échec éventuel.
+      for (const s of v?.statuses ?? []) {
+        if (s?.status === "failed") {
+          const e = s.errors?.[0] ?? {};
+          console.error("livraison échouée", JSON.stringify({ code: e.code, titre: e.title, detail: e.error_data?.details ?? e.message, fin: String(s.recipient_id ?? "").slice(-4) }));
+        }
+      }
       const contacts: any[] = v?.contacts ?? [];
       for (const m of v?.messages ?? []) {
         // Le contact du message : numéro (wa_id) et/ou identifiant WhatsApp (user_id).
