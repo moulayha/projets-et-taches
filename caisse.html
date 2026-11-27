@@ -497,10 +497,12 @@ function viewReglages(){
   <div class="setcard"><h3>Numéro WhatsApp du bot</h3><p class="muted small">Le numéro dédié sur lequel les intervenants enverront leurs dépenses (étape WhatsApp).</p>
     <div class="inline"><input type="tel" id="waNum" placeholder="+212612345678" value="${esc(S.reglages.whatsapp || '')}" aria-label="Numéro WhatsApp"><button class="btn primary" type="button" id="saveWa">Enregistrer</button></div></div>
 
-  <div class="setcard"><h3>Projets : nom court et budget</h3><p class="muted small">Le nom court aide le bot à reconnaître le projet dans un message (ex. « botola »). Le budget est optionnel.</p>
-    ${S.actifs.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Projet</th><th>Nom court WhatsApp</th><th>Budget (DH)</th><th></th></tr></thead><tbody>
+  <div class="setcard"><h3>Projets : nom court, budget et liste WhatsApp</h3><p class="muted small">Le nom court aide le bot à reconnaître le projet dans un message (ex. « botola »). Le budget est optionnel. Décoche « Liste WhatsApp » pour retirer un projet de la liste numérotée envoyée aux intervenants : il reste actif dans la caisse et reconnu s’il est nommé dans un message.</p>
+    ${S.actifs.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Projet</th><th>Nom court WhatsApp</th><th>Budget (DH)</th><th>Liste WhatsApp</th><th></th></tr></thead><tbody>
     ${S.actifs.map(p => `<tr data-pr="${esc(p.id)}"><td>${esc(p.name)}<div class="muted small">${esc(p.status)}</div></td><td><input type="text" data-k="nom_court" value="${esc(p.nom_court || '')}" dir="auto"></td>
-      <td><input type="number" min="0" step="0.01" data-k="budget" value="${p.budget ?? ''}"></td><td><button class="btn sm" type="button" data-save-pr>Enregistrer</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Aucun projet actif.</p>'}</div>
+      <td><input type="number" min="0" step="0.01" data-k="budget" value="${p.budget ?? ''}"></td>
+      <td><label class="small"><input type="checkbox" data-k="affiche" ${p.masque_whatsapp ? '' : 'checked'}> ${p.masque_whatsapp ? 'Masqué' : 'Affiché'}</label></td>
+      <td><button class="btn sm" type="button" data-save-pr>Enregistrer</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Aucun projet actif.</p>'}</div>
 
   <div class="setcard"><h3>Catégories</h3><p class="muted small">Les mots-clés (séparés par des virgules) aident le bot à classer les dépenses.</p>
     <div class="tscroll"><table class="grid"><thead><tr><th>Icône</th><th>Nom</th><th>Mots-clés</th><th>Active</th><th></th></tr></thead><tbody>
@@ -577,9 +579,13 @@ function bindView(){
       if($('#waNum').value.trim() && !n){ setSync('Numéro invalide : écris-le au format international, par exemple +212612345678.', true); return; }
       await run(S.sb.from('caisse_reglages').update({data:{...S.reglages, whatsapp:n || null}}).eq('id', 'options'), 'Numéro WhatsApp enregistré.'); return;
     }
-    if(t.hasAttribute('data-save-pr')){
+    // La case « Liste WhatsApp » s'enregistre dès le clic ; « Enregistrer » enregistre toute la ligne.
+    const caseWa = t.matches('input[type="checkbox"][data-k="affiche"]') && t.closest('tr[data-pr]');
+    if(t.hasAttribute('data-save-pr') || caseWa){
       const tr = t.closest('tr'), nc = tr.querySelector('[data-k="nom_court"]').value.trim(), b = tr.querySelector('[data-k="budget"]').value;
-      await run(S.sb.from('caisse_projets_reglages').upsert({project_id:tr.dataset.pr, nom_court:nc || null, budget:b === '' ? null : Number(b)}), 'Projet enregistré.'); return;
+      const affiche = tr.querySelector('[data-k="affiche"]').checked;
+      await run(S.sb.from('caisse_projets_reglages').upsert({project_id:tr.dataset.pr, nom_court:nc || null, budget:b === '' ? null : Number(b), masque_whatsapp:!affiche}),
+        caseWa ? (affiche ? 'Projet affiché dans la liste WhatsApp.' : 'Projet retiré de la liste WhatsApp.') : 'Projet enregistré.'); return;
     }
     if(t.hasAttribute('data-save-cat')){
       const tr = t.closest('tr'), g = k => tr.querySelector(`[data-k="${k}"]`);

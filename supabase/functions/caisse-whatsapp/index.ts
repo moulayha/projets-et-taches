@@ -112,7 +112,7 @@ async function signatureOk(raw: string, header: string | null): Promise<boolean>
 
 // ---------------------------------------------------------------- Messages
 
-type Projet = { id: string; code: string | null; name: string | null; client: string | null; nom_court: string | null };
+type Projet = { id: string; code: string | null; name: string | null; client: string | null; nom_court: string | null; masque_whatsapp?: boolean };
 type Categorie = { id: string; nom: string; mots_cles: string[]; icone: string };
 
 // Destinataire d'une réponse : le numéro si on le connaît (recommandé par Meta,
@@ -308,7 +308,8 @@ async function demanderProjet(ouvId: string, ids: string[], from: Dest) {
   const { data: dernier } = await sb.from("caisse_depenses").select("project_id")
     .eq("ouvrier_id", ouvId).not("project_id", "is", null)
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
-  const ordre = projets.map((p) => p.id);
+  // Les projets masqués (Réglages → « Liste WhatsApp » décochée) ne sont pas proposés.
+  const ordre = projets.filter((p) => !p.masque_whatsapp).map((p) => p.id);
   if (dernier?.project_id && ordre.includes(dernier.project_id)) {
     ordre.splice(ordre.indexOf(dernier.project_id), 1);
     ordre.unshift(dernier.project_id);
