@@ -1,0 +1,17 @@
+{
+  "name": "Caisse Clic Event",
+  "short_name": "الكاسة",
+  "description": "Déclarer ses dépenses de chantier à la caisse Clic Event.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "app.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F6F8F7",
+  "theme_color": "#0F6B66",
+  "icons": [
+    { "src": "app-icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "app-icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

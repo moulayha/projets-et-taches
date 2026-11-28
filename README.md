@@ -10,6 +10,7 @@ L'application tient dans une seule page statique (`index.html`). Les données so
 |---|---|
 | `index.html` | L'application |
 | `caisse.html` | Module Caisse (avances, dépenses des ouvriers, coût par projet), visible seulement par les super admins, la facturation et les personnes ajoutées dans ses Réglages |
+| `app.html` | Application des intervenants (installable sur le téléphone) : déclarer une dépense par vocal, photo du ticket ou texte, voir son solde. Ouverte avec un lien personnel créé dans Caisse → Intervenants → « 📱 Lien » ; serveur : fonction `caisse-app` |
 | `config.js` | Adresse et clé publique du projet Supabase |
 | `supabase/schema.sql` | Tables, sécurité (RLS) et temps réel |
 

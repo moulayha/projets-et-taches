@@ -176,6 +176,7 @@ dialog::backdrop{background:rgba(10,20,18,.45)}
 </main>
 
 <dialog id="dlg"><form method="dialog" class="dlg" id="dlgForm" novalidate></form></dialog>
+<dialog id="dlgLien"><div class="dlg" id="dlgLienC"></div></dialog>
 
 <script>
 (function(){
@@ -253,17 +254,7 @@ async function loadAll(){
   if(isSuper()){
     S.acces = await q(sb.from('caisse_acces').select('*'));
     S.users = await q(sb.from('app_users').select('id,role'));
-    // Messages WhatsApp d'expéditeurs non reconnus (30 derniers jours), regroupés par expéditeur.
-    const depuis = new Date(Date.now() - 30 * 864e5).toISOString();
-    const inconnus = await q(sb.from('caisse_messages').select('id,recu_le,telephone,wa_user_id,profil_nom,texte,type')
-      .is('ouvrier_id', null).gte('recu_le', depuis).order('recu_le', {ascending:false}).limit(200));
-    const parCle = new Map();
-    inconnus.forEach(m => { const k = m.wa_user_id || m.telephone; if(!k) return;
-      const g = parCle.get(k) || {cle:k, wa_user_id:m.wa_user_id, telephone:m.telephone, profil_nom:m.profil_nom, dernier:m, ids:[], nb:0};
-      g.ids.push(m.id); g.nb++; if(!g.profil_nom && m.profil_nom) g.profil_nom = m.profil_nom; if(!g.telephone && m.telephone) g.telephone = m.telephone;
-      parCle.set(k, g); });
-    S.inconnus = [...parCle.values()];
-  } else S.inconnus = [];
+  }
 }
 let reloadTimer = null;
 function scheduleReload(){ clearTimeout(reloadTimer); reloadTimer = setTimeout(refresh, 400); }
@@ -306,8 +297,6 @@ function alertes(){
   const limite = new Date(Date.now() - JOURS_A_VALIDER * 864e5).toISOString();
   const vieux = S.depenses.filter(d => d.statut === 'a_valider' && d.created_at < limite).length;
   if(vieux) out.push({n:'orange', t:`${vieux} dépense${vieux > 1 ? 's attendent' : ' attend'} une validation depuis plus de ${JOURS_A_VALIDER} jours.`, go:'valider'});
-  const inc = (S.inconnus || []).length;
-  if(inc) out.push({n:'bleu', t:`${inc} contact${inc > 1 ? 's' : ''} WhatsApp non reconnu${inc > 1 ? 's' : ''} : le bot ne leur répond pas.`, go:'ouvriers'});
   return out;
 }
 function viewAlertes(){
@@ -371,14 +360,15 @@ const STATUTS = {a_valider:'à valider', validee:'validée', rejetee:'rejetée'}
 function viewValider(){
   const list = S.depenses.filter(d => d.statut === 'a_valider').sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
   const head = `<div class="head"><h2>À valider <span class="muted small">${list.length}</span></h2>${canWrite() && list.length > 1 ? '<div class="acts"><button class="btn ok" type="button" id="validAll">Valider toutes les lignes complètes</button></div>' : ''}</div>`;
-  if(!list.length) return head + '<div class="empty">Rien à valider. Les dépenses envoyées par WhatsApp arriveront ici.</div>';
+  if(!list.length) return head + '<div class="empty">Rien à valider. Les dépenses envoyées depuis l’application des intervenants arriveront ici.</div>';
   const ro = canWrite() ? '' : 'disabled';
   return head + '<div class="cards">' + list.map(d => {
     const m = d.message_id ? S.messages.get(d.message_id) : null;
-    const src = {whatsapp_texte:'WhatsApp texte', whatsapp_vocal:'WhatsApp vocal', whatsapp_photo:'WhatsApp photo', saisie:'Saisie', import:'Import'}[d.source] || d.source;
+    const src = {app_texte:'Application · texte', app_vocal:'Application · vocal', app_photo:'Application · photo',
+      whatsapp_texte:'WhatsApp texte', whatsapp_vocal:'WhatsApp vocal', whatsapp_photo:'WhatsApp photo', saisie:'Saisie', import:'Import'}[d.source] || d.source;
     return `<article class="vcard" data-id="${esc(d.id)}">
       <div class="vtop"><strong>${esc(d.payeur === 'direct' ? 'Payé en direct' : ouvName(d.ouvrier_id))}</strong><span class="date muted">${fmtDate(d.date_op)}</span><span class="pill p-info">${esc(src)}</span>
-        ${d.justificatif ? `<button class="linkbtn small" type="button" data-justif="${esc(d.justificatif)}">${d.source === 'whatsapp_vocal' ? '🎤 Écouter le vocal' : 'Voir le justificatif'}</button>` : ''}</div>
+        ${d.justificatif ? `<button class="linkbtn small" type="button" data-justif="${esc(d.justificatif)}">${/_vocal$/.test(d.source) ? '🎤 Écouter le vocal' : 'Voir le justificatif'}</button>` : ''}</div>
       ${m && m.texte ? `<div class="vmsg" dir="auto">${esc(m.texte)}</div>` : (d.libelle ? `<div class="vmsg" dir="auto">${esc(d.libelle)}</div>` : '')}
       ${(() => { const dbl = doublons(d); return dbl.length ? `<div class="alerte orange small" style="margin:8px 0">⚠️ <span><b>Doublon possible</b> : ${dbl.slice(0, 3).map(({x, pourquoi}) =>
         `${pourquoi} que la dépense du ${fmtDate(x.date_op)} (${x.montant != null ? dh(x.montant) : 'sans montant'}, ${STATUTS[x.statut] || x.statut})`).join(' ; ')}.</span></div>` : ''; })()}
@@ -454,44 +444,55 @@ function viewProjets(){
 function viewOuvriers(){
   const so = new Map(S.soldes.map(s => [s.ouvrier_id, s]));
   return `<div class="head"><h2>Intervenants <span class="muted small">${S.ouvriers.length}</span></h2>${isSuper() ? '<div class="acts"><button class="btn primary" type="button" data-new="ouvrier">+ Intervenant</button></div>' : ''}</div>
-  ${S.ouvriers.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Nom</th><th>Téléphone WhatsApp</th><th>État</th><th class="num">Solde en main</th><th>Note</th></tr></thead><tbody>
+  ${S.ouvriers.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Nom</th><th>Téléphone</th><th>Application</th><th>État</th><th class="num">Solde en main</th><th>Note</th></tr></thead><tbody>
   ${S.ouvriers.map(o => { const s = so.get(o.id) || {}; return `<tr class="${isSuper() ? 'row' : ''}" ${isSuper() ? `data-edit="ouvrier:${esc(o.id)}"` : ''}><td>${esc(o.nom)}</td><td class="mono">${esc(o.telephone || '—')}</td>
+    <td>${o.app_token_hash ? `<span class="pill p-ok" title="Lien créé le ${esc(fmtDate((o.app_lien_cree || '').slice(0, 10)))}">Lien actif</span>` : '<span class="pill p-gray">Pas de lien</span>'}
+      ${isSuper() && o.actif ? `<button class="btn sm" type="button" data-lien="${esc(o.id)}">📱 Lien</button>` : ''}</td>
     <td>${o.actif ? '<span class="pill p-ok">Actif</span>' : '<span class="pill p-gray">Inactif</span>'}</td><td class="num ${Number(s.solde) < 0 ? 'neg' : ''}">${dh(s.solde)}</td><td class="muted">${esc(o.note)}</td></tr>`; }).join('')}
-  </tbody></table></div><p class="muted small">Le bot WhatsApp reconnaît les numéros enregistrés ici, au format international (+212…), et les contacts associés ci-dessous.${isSuper() ? '' : ' Seul un super admin peut ajouter ou modifier un intervenant.'}</p>`
-  : `<div class="empty">Aucun intervenant enregistré.${isSuper() ? ' Ajoute ton équipe avec « + Intervenant ».' : ''}</div>`}
-  ${viewInconnus()}`;
+  </tbody></table></div><p class="muted small">Chaque intervenant déclare ses dépenses dans l’application, ouverte avec son lien personnel (« 📱 Lien »).${isSuper() ? '' : ' Seul un super admin peut ajouter ou modifier un intervenant et créer les liens.'}</p>`
+  : `<div class="empty">Aucun intervenant enregistré.${isSuper() ? ' Ajoute ton équipe avec « + Intervenant ».' : ''}</div>`}`;
 }
 
-// Expéditeurs WhatsApp non reconnus : souvent un intervenant dont WhatsApp masque le numéro
-// (nom d'utilisateur activé). On l'associe une fois, le bot le reconnaît ensuite.
-function viewInconnus(){
-  if(!isSuper() || !(S.inconnus || []).length) return '';
-  const actifs = S.ouvriers.filter(o => o.actif);
-  return `<div class="setcard" style="margin-top:18px"><h3>Contacts WhatsApp non reconnus <span class="muted small">${S.inconnus.length}</span></h3>
-    <p class="muted small">Ces personnes ont écrit au bot, qui ne les a pas reconnues : il ne leur a pas répondu. Si c’est un intervenant, associe-le : le bot le reconnaîtra à partir de son prochain message.</p>
-    <div class="tscroll"><table class="grid"><thead><tr><th>Nom WhatsApp</th><th>Numéro</th><th>Dernier message</th><th>Associer à</th><th></th></tr></thead><tbody>
-    ${S.inconnus.map(g => `<tr data-inconnu="${esc(g.cle)}"><td>${esc(g.profil_nom || '—')}</td>
-      <td class="mono">${g.telephone ? esc(g.telephone) : '<span class="muted">masqué</span>'}</td>
-      <td dir="auto">${esc((g.dernier.texte || ({photo:'📷 Photo', vocal:'🎤 Vocal'}[g.dernier.type] || '—')).slice(0, 60))}<div class="muted small">${fmtDate(g.dernier.recu_le.slice(0, 10))}${g.nb > 1 ? ` · ${g.nb} messages` : ''}</div></td>
-      <td><select data-lier-ouv aria-label="Intervenant"><option value="">— Intervenant —</option>${actifs.map(o => `<option value="${esc(o.id)}">${esc(o.nom)}</option>`).join('')}</select></td>
-      <td><button class="btn sm primary" type="button" data-lier>Associer</button></td></tr>`).join('')}
-    </tbody></table></div></div>`;
-}
-async function lierInconnu(row){
-  const g = (S.inconnus || []).find(x => x.cle === row.dataset.inconnu); if(!g) return;
-  const ouvId = row.querySelector('[data-lier-ouv]').value;
-  if(!ouvId){ setSync('Choisis l’intervenant à associer.', true); return; }
+/* ---------- lien personnel vers l'application intervenant ---------- */
+let qrP = null;
+const loadQr = () => qrP || (qrP = new Promise((res, rej) => {
+  const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+  s.onload = () => res(window.qrcode); s.onerror = () => { qrP = null; rej(new Error('qr')); }; document.head.appendChild(s);
+}));
+function ouvrirLien(ouvId, jeton){
   const o = S.ouvriers.find(x => x.id === ouvId); if(!o) return;
-  const patch = {};
-  if(g.wa_user_id) patch.wa_user_id = g.wa_user_id;
-  if(g.telephone && !o.telephone) patch.telephone = g.telephone;
-  if(g.telephone && o.telephone && o.telephone !== g.telephone && !g.wa_user_id){
-    setSync(`${o.nom} a déjà le numéro ${o.telephone}. Modifie d’abord sa fiche si son numéro a changé.`, true); return; }
-  if(o.wa_user_id && g.wa_user_id && o.wa_user_id !== g.wa_user_id && !confirm(`${o.nom} est déjà associé à un autre compte WhatsApp. Le remplacer par celui-ci ?`)) return;
-  const r1 = await S.sb.from('caisse_ouvriers').update(patch).eq('id', ouvId);
-  if(r1.error){ setSync(r1.error.code === '23505' ? 'Ce contact WhatsApp est déjà associé à un autre intervenant.' : 'L’association a échoué. ' + friendly(r1.error), true); return; }
-  await run(S.sb.from('caisse_messages').update({ouvrier_id:ouvId}).in('id', g.ids),
-    `${o.nom} est associé. Demande-lui de renvoyer son dernier message : le bot lui répondra.`);
+  const d = $('#dlgLien'), c = $('#dlgLienC');
+  const url = jeton ? new URL('app.html', location.href).href + '#t=' + jeton : '';
+  const tel = String(o.telephone || '').replace(/\D/g, '');
+  const texte = `السلام ${o.nom}، هادا الرابط ديال الكاسة. حلّو ودير «Ajouter à l'écran d'accueil» :\n${url}`;
+  c.innerHTML = `<h3>📱 Application de ${esc(o.nom)}</h3>
+    ${jeton ? `<p class="muted small">Fais scanner ce code avec son téléphone, ou envoie-lui le lien. <b>Ce lien ne sera plus affiché</b> : garde-le si besoin.</p>
+      <div id="qrBox" style="display:flex;justify-content:center;padding:8px">…</div>
+      <input type="text" readonly id="lienUrl" value="${esc(url)}" style="width:100%;font-family:var(--mono);font-size:12px">
+      <div class="dacts" style="flex-wrap:wrap"><button class="btn" type="button" id="lienCopier">Copier le lien</button>
+        ${tel ? `<a class="btn" target="_blank" rel="noopener" href="https://wa.me/${esc(tel)}?text=${encodeURIComponent(texte)}">Envoyer par WhatsApp</a>` : ''}</div>`
+    : `<p>${o.app_token_hash ? `Un lien est actif depuis le ${esc(fmtDate((o.app_lien_cree || '').slice(0, 10)))}. Pour le renvoyer, crée un nouveau lien : l’ancien ne marchera plus.` : 'Aucun lien pour le moment.'}</p>`}
+    <p class="err" id="lienErr" role="alert"></p>
+    <div class="dacts">${o.app_token_hash ? '<button class="btn danger" type="button" id="lienCouper">Couper le lien</button>' : ''}<span class="sp"></span>
+      <button class="btn" type="button" id="lienFermer">Fermer</button>
+      <button class="btn primary" type="button" id="lienNouveau">${o.app_token_hash ? 'Nouveau lien' : 'Créer le lien'}</button></div>`;
+  if(!d.open) d.showModal();
+  if(jeton) loadQr().then(qrcode => { const qr = qrcode(0, 'M'); qr.addData(url); qr.make(); $('#qrBox').innerHTML = qr.createImgTag(5, 8); })
+    .catch(() => { $('#qrBox').textContent = 'QR code indisponible : utilise le lien.'; });
+  $('#lienFermer').onclick = () => d.close();
+  if($('#lienCopier')) $('#lienCopier').onclick = async () => { try { await navigator.clipboard.writeText(url); $('#lienCopier').textContent = 'Copié ✓'; } catch(e){ $('#lienUrl').select(); } };
+  $('#lienNouveau').onclick = async () => {
+    if(o.app_token_hash && !confirm(`Créer un nouveau lien pour ${o.nom} ? L’ancien lien ne marchera plus sur son téléphone.`)) return;
+    const r = await S.sb.rpc('caisse_nouveau_lien', {p_ouvrier:o.id});
+    if(r.error){ $('#lienErr').textContent = friendly(r.error); return; }
+    await refresh(); ouvrirLien(o.id, r.data);
+  };
+  if($('#lienCouper')) $('#lienCouper').onclick = async () => {
+    if(!confirm(`Couper le lien de ${o.nom} ? L’application ne marchera plus sur son téléphone jusqu’à un nouveau lien.`)) return;
+    const r = await S.sb.rpc('caisse_couper_lien', {p_ouvrier:o.id});
+    if(r.error){ $('#lienErr').textContent = friendly(r.error); return; }
+    d.close(); await refresh(); setSync('Lien coupé.');
+  };
 }
 
 function viewReglages(){
@@ -515,17 +516,14 @@ function viewReglages(){
     <div class="chk" id="statuts">${statuts.map(s => `<label><input type="checkbox" value="${esc(s)}" ${actifs.has(s) ? 'checked' : ''}> ${esc(s)}</label>`).join('')}</div>
     <div style="margin-top:10px"><button class="btn primary" type="button" id="saveStatuts">Enregistrer</button></div></div>
 
-  <div class="setcard"><h3>Numéro WhatsApp du bot</h3><p class="muted small">Le numéro dédié sur lequel les intervenants enverront leurs dépenses (étape WhatsApp).</p>
-    <div class="inline"><input type="tel" id="waNum" placeholder="+212612345678" value="${esc(S.reglages.whatsapp || '')}" aria-label="Numéro WhatsApp"><button class="btn primary" type="button" id="saveWa">Enregistrer</button></div></div>
-
-  <div class="setcard"><h3>Projets : nom court, budget et liste WhatsApp</h3><p class="muted small">Le nom court aide le bot à reconnaître le projet dans un message (ex. « botola »). Le budget est optionnel. Décoche « Liste WhatsApp » pour retirer un projet de la liste numérotée envoyée aux intervenants : il reste actif dans la caisse et reconnu s’il est nommé dans un message.</p>
-    ${S.actifs.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Projet</th><th>Nom court WhatsApp</th><th>Budget (DH)</th><th>Liste WhatsApp</th><th></th></tr></thead><tbody>
+  <div class="setcard"><h3>Projets : nom court, budget et application</h3><p class="muted small">Le nom court est le nom affiché aux intervenants dans l’application, et il aide l’IA à reconnaître le projet (ex. « Botola »). Le budget est optionnel. Décoche « Application » pour retirer un projet de la liste proposée aux intervenants : il reste actif dans la caisse.</p>
+    ${S.actifs.length ? `<div class="tscroll"><table class="grid"><thead><tr><th>Projet</th><th>Nom court</th><th>Budget (DH)</th><th>Application</th><th></th></tr></thead><tbody>
     ${S.actifs.map(p => `<tr data-pr="${esc(p.id)}"><td>${esc(p.name)}<div class="muted small">${esc(p.status)}</div></td><td><input type="text" data-k="nom_court" value="${esc(p.nom_court || '')}" dir="auto"></td>
       <td><input type="number" min="0" step="0.01" data-k="budget" value="${p.budget ?? ''}"></td>
       <td><label class="small"><input type="checkbox" data-k="affiche" ${p.masque_whatsapp ? '' : 'checked'}> ${p.masque_whatsapp ? 'Masqué' : 'Affiché'}</label></td>
       <td><button class="btn sm" type="button" data-save-pr>Enregistrer</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Aucun projet actif.</p>'}</div>
 
-  <div class="setcard"><h3>Catégories</h3><p class="muted small">Les mots-clés (séparés par des virgules) aident le bot à classer les dépenses.</p>
+  <div class="setcard"><h3>Catégories</h3><p class="muted small">Les mots-clés (séparés par des virgules) aident l’IA à classer les dépenses.</p>
     <div class="tscroll"><table class="grid"><thead><tr><th>Icône</th><th>Nom</th><th>Mots-clés</th><th>Active</th><th></th></tr></thead><tbody>
     ${S.categories.map(c => `<tr data-cat="${esc(c.id)}"><td><input type="text" data-k="icone" value="${esc(c.icone)}" style="width:52px"></td><td><input type="text" data-k="nom" value="${esc(c.nom)}"></td>
       <td><input type="text" data-k="mots_cles" value="${esc((c.mots_cles || []).join(', '))}" dir="auto"></td><td><input type="checkbox" data-k="actif" ${c.actif ? 'checked' : ''} aria-label="Active"></td>
@@ -533,24 +531,6 @@ function viewReglages(){
     <tr data-cat=""><td><input type="text" data-k="icone" placeholder="🔧" style="width:52px"></td><td><input type="text" data-k="nom" placeholder="Nouvelle catégorie"></td><td><input type="text" data-k="mots_cles" placeholder="mot1, mot2" dir="auto"></td><td><input type="checkbox" data-k="actif" checked aria-label="Active"></td><td><button class="btn sm primary" type="button" data-save-cat>Ajouter</button></td></tr>
     </tbody></table></div></div>
   </div>`;
-}
-
-/* ---------- avis WhatsApp à l'intervenant ---------- */
-// Demande au bot de prévenir l'intervenant (avance reçue, dépense refusée). Renvoie une phrase pour la barre d'état.
-async function notifierWhatsApp(type, id){
-  try {
-    const r = await S.sb.functions.invoke('caisse-whatsapp?action=notifier', {body:{type, id}});
-    const d = r.data || {};
-    if(d.ok) return d.modele ? 'Intervenant prévenu sur WhatsApp (message modèle).' : 'Intervenant prévenu sur WhatsApp.';
-    return ({
-      hors_fenetre:'Intervenant non prévenu : il n’a pas écrit au bot depuis plus de 24 h (WhatsApp l’interdit sans modèle approuvé).',
-      sans_numero:'Intervenant non prévenu : pas de numéro WhatsApp sur sa fiche.',
-      modele_refuse:'Intervenant non prévenu : le modèle de message a été refusé par WhatsApp.',
-      sans_objet:'',
-    })[d.raison] ?? 'Intervenant non prévenu sur WhatsApp (erreur d’envoi).';
-  } catch(e){
-    return 'Intervenant non prévenu sur WhatsApp (erreur d’envoi).';
-  }
 }
 
 /* ---------- actions ---------- */
@@ -566,7 +546,7 @@ function bindView(){
   v.onclick = async e => {
     const t = e.target;
     const go = t.closest('[data-goto]'); if(go){ setTab(go.dataset.goto); return; }
-    const li = t.closest('[data-lier]'); if(li){ li.disabled = true; await lierInconnu(li.closest('tr')); li.disabled = false; return; }
+    const li = t.closest('[data-lien]'); if(li){ ouvrirLien(li.dataset.lien); return; }
     const nw = t.closest('[data-new]'); if(nw){ openForm(nw.dataset.new); return; }
     const j = t.closest('[data-justif]'); if(j){ openJustif(j.dataset.justif); return; }
     const pm = t.closest('[data-projmvt]'); if(pm){ S.f = {...S.f, projet:pm.dataset.projmvt, du:'', au:''}; setTab('mvt'); return; }
@@ -584,11 +564,7 @@ function bindView(){
       }
       if(act.dataset.act === 'rejeter'){
         if(!confirm('Rejeter cette dépense ? Elle ne comptera ni dans le solde de l’intervenant ni dans le coût du projet.')) return;
-        act.disabled = true;
-        const ok = await run(S.sb.from('caisse_depenses').update({...patch, statut:'rejetee'}).eq('id', id), 'Dépense rejetée.');
-        if(ok && d.payeur === 'ouvrier' && d.ouvrier_id && String(d.source || '').startsWith('whatsapp')){
-          setSync('Dépense rejetée. ' + await notifierWhatsApp('rejet', id));
-        }
+        act.disabled = true; await run(S.sb.from('caisse_depenses').update({...patch, statut:'rejetee'}).eq('id', id), 'Dépense rejetée.');
       }
       return;
     }
@@ -617,18 +593,13 @@ function bindView(){
       if(!vals.length){ setSync('Coche au moins un état.', true); return; }
       await run(S.sb.from('caisse_reglages').update({data:{...S.reglages, statuts_actifs:vals}}).eq('id', 'options'), 'États actifs enregistrés.'); return;
     }
-    if(t.id === 'saveWa'){
-      const n = normPhone($('#waNum').value);
-      if($('#waNum').value.trim() && !n){ setSync('Numéro invalide : écris-le au format international, par exemple +212612345678.', true); return; }
-      await run(S.sb.from('caisse_reglages').update({data:{...S.reglages, whatsapp:n || null}}).eq('id', 'options'), 'Numéro WhatsApp enregistré.'); return;
-    }
-    // La case « Liste WhatsApp » s'enregistre dès le clic ; « Enregistrer » enregistre toute la ligne.
+    // La case « Application » s'enregistre dès le clic ; « Enregistrer » enregistre toute la ligne.
     const caseWa = t.matches('input[type="checkbox"][data-k="affiche"]') && t.closest('tr[data-pr]');
     if(t.hasAttribute('data-save-pr') || caseWa){
       const tr = t.closest('tr'), nc = tr.querySelector('[data-k="nom_court"]').value.trim(), b = tr.querySelector('[data-k="budget"]').value;
       const affiche = tr.querySelector('[data-k="affiche"]').checked;
       await run(S.sb.from('caisse_projets_reglages').upsert({project_id:tr.dataset.pr, nom_court:nc || null, budget:b === '' ? null : Number(b), masque_whatsapp:!affiche}),
-        caseWa ? (affiche ? 'Projet affiché dans la liste WhatsApp.' : 'Projet retiré de la liste WhatsApp.') : 'Projet enregistré.'); return;
+        caseWa ? (affiche ? 'Projet affiché dans l’application.' : 'Projet retiré de l’application.') : 'Projet enregistré.'); return;
     }
     if(t.hasAttribute('data-save-cat')){
       const tr = t.closest('tr'), g = k => tr.querySelector(`[data-k="${k}"]`);
@@ -695,7 +666,7 @@ function openForm(kind, id, override){
   } else if(kind === 'ouvrier'){
     title = id ? 'Intervenant' : 'Nouvel intervenant';
     body = `<label class="f"><span>Nom</span><input type="text" name="nom" required value="${esc(cur.nom || '')}" ${dis}></label>
-      <label class="f"><span>Téléphone WhatsApp</span><input type="tel" name="telephone" placeholder="+212612345678 ou 0612345678" value="${esc(cur.telephone || '')}" ${dis}></label>
+      <label class="f"><span>Téléphone</span><input type="tel" name="telephone" placeholder="+212612345678 ou 0612345678" value="${esc(cur.telephone || '')}" ${dis}></label>
       <label class="f"><span><input type="checkbox" name="actif" ${cur.actif !== false ? 'checked' : ''} ${dis}> Actif</span></label>
       <label class="f"><span>Note</span><textarea name="note" rows="2" ${dis}>${esc(cur.note || '')}</textarea></label>`;
   }
@@ -751,9 +722,7 @@ function openForm(kind, id, override){
     const r = id ? await S.sb.from(T).update(row).eq('id', id) : await S.sb.from(T).insert(row).select('id').single();
     if($('#dlgSave')) $('#dlgSave').disabled = false;
     if(r.error){ err.textContent = friendly(r.error); return; }
-    dlg.close(); await refresh(); setSync('Enregistré.');
-    // Nouvelle avance : l'intervenant est prévenu sur WhatsApp.
-    if(kind === 'avance' && !id && r.data && r.data.id) setSync('Avance enregistrée. ' + await notifierWhatsApp('avance', r.data.id));
+    dlg.close(); await refresh(); setSync(kind === 'avance' && !id ? 'Avance enregistrée : l’intervenant la voit dans son application.' : 'Enregistré.');
   };
   dlg.showModal();
   const first = form.querySelector('input:not([type=radio]):not([disabled]),select:not([disabled])'); if(first) first.focus();

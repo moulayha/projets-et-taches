@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0F6B66">
+<meta name="robots" content="noindex">
+<title>الكاسة · Clic Event</title>
+<link rel="manifest" href="app.webmanifest">
+<link rel="icon" href="app-icone-192.png">
+<link rel="apple-touch-icon" href="app-icone-192.png">
+<style>
+/* Application des intervenants : déclarer une dépense en un geste (vocal, photo ou texte).
+   Pensée pour des personnes qui lisent peu : gros boutons, icônes, chiffres, darija. */
+:root{
+  --bg:#F6F8F7; --surface:#FFFFFF; --fg:#1C2321; --muted:#65706C; --line:#E0E5E3;
+  --accent:#0F6B66; --accent-soft:#DDEEEC; --ok:#22663A; --ok-bg:#DDF0E2;
+  --bad:#B3362A; --bad-bg:#FBE0DC; --warn:#954610; --warn-bg:#FBE5D2;
+  --rouge:#D93A2B;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:18px/1.45 "Segoe UI",Tahoma,"Noto Sans Arabic","Noto Naskh Arabic",system-ui,sans-serif}
+body{min-height:100vh;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+.ecran{max-width:520px;margin:0 auto;padding:14px 14px 40px}
+[hidden]{display:none!important}
+.num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+
+/* en-tête */
+.tete{display:flex;align-items:center;gap:10px;margin:4px 2px 12px}
+.tete .nom{font-weight:700;font-size:20px}
+.tete .maj{margin-inline-start:auto;font-size:26px;width:48px;height:48px;border-radius:50%;background:var(--surface);border:1px solid var(--line)}
+
+/* solde */
+.solde{background:var(--accent);color:#fff;border-radius:22px;padding:18px 20px;margin-bottom:12px}
+.solde .l{font-size:17px;opacity:.9}
+.solde .v{font-size:42px;font-weight:800;line-height:1.1;margin-top:2px}
+.solde .v small{font-size:22px;font-weight:700}
+.solde .a{margin-top:8px;font-size:16px;background:rgba(255,255,255,.16);display:inline-block;padding:4px 12px;border-radius:999px}
+.solde.neg{background:var(--bad)}
+
+/* projet choisi */
+.projet{display:flex;align-items:center;gap:10px;width:100%;background:var(--surface);border:2px solid var(--line);border-radius:18px;padding:12px 14px;margin-bottom:14px;text-align:start}
+.projet .i{font-size:28px}
+.projet .t{flex:1;min-width:0}
+.projet .t b{display:block;font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.projet .t span{font-size:14px;color:var(--muted)}
+.projet .c{font-size:15px;color:var(--accent);font-weight:700}
+
+/* trois gros boutons */
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}
+.gros{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:24px;min-height:128px;font-weight:800;font-size:20px;box-shadow:0 2px 0 rgba(0,0,0,.08)}
+.gros .e{font-size:48px;line-height:1}
+.gros.vocal{grid-column:1/-1;background:var(--rouge);color:#fff;min-height:150px}
+.gros.vocal .e{font-size:60px}
+.gros.photo{background:#1D5889;color:#fff}
+.gros.texte{background:var(--surface);color:var(--fg);border:2px solid var(--line)}
+
+/* historique */
+h2{font-size:18px;margin:6px 4px 10px;color:var(--muted)}
+.ligne{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:8px}
+.ligne .s{font-size:26px;width:34px;text-align:center}
+.ligne .t{flex:1;min-width:0}
+.ligne .t b{display:block;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ligne .t span{font-size:14px;color:var(--muted)}
+.ligne .m{font-weight:800;font-size:19px;white-space:nowrap}
+.ligne .m.plus{color:var(--ok)}
+.ligne .x{font-size:15px;color:var(--bad);border:1px solid var(--bad-bg);background:var(--bad-bg);border-radius:12px;padding:6px 10px;font-weight:700}
+.vide{text-align:center;color:var(--muted);padding:20px}
+
+/* fenêtres plein écran */
+.plein{position:fixed;inset:0;background:var(--bg);z-index:10;overflow:auto;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.plein .ecran{display:flex;flex-direction:column;min-height:100%;gap:14px;padding-top:20px}
+.titre{font-size:26px;font-weight:800;text-align:center;margin:8px 0}
+.sous{font-size:17px;color:var(--muted);text-align:center;margin:-6px 0 6px}
+.grand-btn{width:100%;border-radius:20px;padding:18px;font-size:22px;font-weight:800}
+.vert{background:var(--accent);color:#fff}
+.gris{background:var(--surface);border:2px solid var(--line)}
+.rouge{background:var(--bad-bg);color:var(--bad)}
+.choix{display:flex;align-items:center;gap:12px;width:100%;text-align:start;background:var(--surface);border:2px solid var(--line);border-radius:18px;padding:16px;font-size:19px;font-weight:700}
+.choix.actif{border-color:var(--accent);background:var(--accent-soft)}
+.choix span{display:block;font-size:14px;color:var(--muted);font-weight:400}
+
+/* enregistrement */
+.micro{margin:30px auto 10px;width:200px;height:200px;border-radius:50%;background:var(--rouge);color:#fff;font-size:84px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 0 rgba(217,58,43,.5);animation:pulse 1.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(217,58,43,.45)}70%{box-shadow:0 0 0 28px rgba(217,58,43,0)}100%{box-shadow:0 0 0 0 rgba(217,58,43,0)}}
+.chrono{font-size:40px;font-weight:800;text-align:center}
+
+/* attente */
+.roue{margin:60px auto 10px;width:84px;height:84px;border:9px solid var(--accent-soft);border-top-color:var(--accent);border-radius:50%;animation:tour 1s linear infinite}
+@keyframes tour{to{transform:rotate(360deg)}}
+
+/* saisie texte et pavé numérique */
+textarea{width:100%;min-height:150px;font:inherit;font-size:22px;border:2px solid var(--line);border-radius:18px;padding:14px;background:var(--surface);resize:vertical}
+.ecranm{font-size:52px;font-weight:800;text-align:center;background:var(--surface);border:2px solid var(--line);border-radius:18px;padding:10px;min-height:84px}
+.pave{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;direction:ltr}
+.pave button{background:var(--surface);border:2px solid var(--line);border-radius:18px;font-size:30px;font-weight:800;padding:16px 0}
+
+/* confirmation */
+.carte{background:var(--surface);border:2px solid var(--ok-bg);border-radius:22px;padding:16px}
+.carte .r{display:flex;justify-content:space-between;gap:10px;font-size:20px;padding:8px 0;border-bottom:1px solid var(--line)}
+.carte .r:last-child{border-bottom:0}
+.carte .r b{white-space:nowrap}
+.gros-ok{font-size:90px;text-align:center;margin-top:10px}
+.lu{font-size:15px;color:var(--muted);text-align:center}
+
+.message{position:fixed;inset-inline:14px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:20;background:#1C2321;color:#fff;border-radius:16px;padding:14px 16px;font-size:18px;text-align:center}
+.erreur{text-align:center;padding:40px 20px}
+.erreur .e{font-size:80px}
+</style>
+</head>
+<body>
+
+<!-- Accueil -->
+<main class="ecran" id="accueil" hidden>
+  <div class="tete"><span style="font-size:28px">👷</span><span class="nom" id="nom"></span>
+    <button class="maj" id="maj" type="button" aria-label="تحديث">🔄</button></div>
+  <section class="solde" id="solde" aria-live="polite">
+    <div class="l" id="soldeL">💰 عندك</div>
+    <div class="v"><span class="num" id="soldeV">0</span> <small>درهم</small></div>
+    <div class="a" id="attente" hidden></div>
+  </section>
+  <button class="projet" id="projetBtn" type="button">
+    <span class="i">📁</span>
+    <span class="t"><b id="projetNom" dir="auto">—</b><span>المشروع</span></span>
+    <span class="c">بدّل ◀</span>
+  </button>
+  <div class="actions">
+    <button class="gros vocal" id="btnVocal" type="button"><span class="e">🎤</span>هضر</button>
+    <button class="gros photo" id="btnPhoto" type="button"><span class="e">📷</span>تصويرة</button>
+    <button class="gros texte" id="btnTexte" type="button"><span class="e">✍️</span>كتب</button>
+  </div>
+  <input type="file" id="fichierPhoto" accept="image/*" capture="environment" hidden>
+  <h2>📋 آخر الحركات</h2>
+  <div id="histo"></div>
+</main>
+
+<!-- Choix du projet -->
+<div class="plein" id="pProjet" hidden><div class="ecran">
+  <div class="titre">📁 شمن مشروع؟</div>
+  <div id="listeProjets" style="display:flex;flex-direction:column;gap:10px"></div>
+  <button class="grand-btn gris" type="button" data-fermer>✖ رجوع</button>
+</div></div>
+
+<!-- Enregistrement vocal -->
+<div class="plein" id="pVocal" hidden><div class="ecran">
+  <div class="titre">🎤 هضر دابا</div>
+  <div class="sous">قول الشي والثمن. مثال: «مزوط ميتين درهم»</div>
+  <div class="micro">🎤</div>
+  <div class="chrono num" id="chrono">0:00</div>
+  <button class="grand-btn vert" type="button" id="stopVocal">✅ صيفط</button>
+  <button class="grand-btn gris" type="button" id="annulVocal">✖ بلاش</button>
+</div></div>
+
+<!-- Texte -->
+<div class="plein" id="pTexte" hidden><div class="ecran">
+  <div class="titre">✍️ كتب المصروف</div>
+  <div class="sous">مثال: مزوط 200</div>
+  <textarea id="texte" dir="auto" placeholder="مزوط 200"></textarea>
+  <button class="grand-btn vert" type="button" id="envoyerTexte">✅ صيفط</button>
+  <button class="grand-btn gris" type="button" data-fermer>✖ بلاش</button>
+</div></div>
+
+<!-- Montant -->
+<div class="plein" id="pMontant" hidden><div class="ecran">
+  <div class="titre">💰 شحال؟</div>
+  <div class="ecranm num" id="ecranM">0</div>
+  <div class="pave" id="pave">
+    <button type="button">1</button><button type="button">2</button><button type="button">3</button>
+    <button type="button">4</button><button type="button">5</button><button type="button">6</button>
+    <button type="button">7</button><button type="button">8</button><button type="button">9</button>
+    <button type="button" data-k="del">⌫</button><button type="button">0</button><button type="button" data-k="ok" style="background:var(--accent);color:#fff;border-color:var(--accent)">✅</button>
+  </div>
+</div></div>
+
+<!-- Attente -->
+<div class="plein" id="pAttente" hidden><div class="ecran">
+  <div class="roue"></div>
+  <div class="titre">⏳ كنصيفطو…</div>
+</div></div>
+
+<!-- Confirmation -->
+<div class="plein" id="pOk" hidden><div class="ecran">
+  <div class="gros-ok">✅</div>
+  <div class="titre">توصلنا</div>
+  <div class="carte" id="carteOk"></div>
+  <div class="lu" id="luOk"></div>
+  <button class="grand-btn vert" type="button" data-fermer>👍 مزيان</button>
+  <button class="grand-btn rouge" type="button" id="annulerOk">❌ غلط، لغيها</button>
+</div></div>
+
+<!-- Lien absent ou désactivé -->
+<main class="ecran erreur" id="sansLien" hidden>
+  <div class="e">🔒</div>
+  <div class="titre">الرابط ماخدامش</div>
+  <p>طلب رابط جديد من المسؤول ديال الكاسة، وحلّو مرة وحدة.</p>
+</main>
+
+<div class="message" id="message" role="status" hidden></div>
+
+<script src="config.js"></script>
+<script>
+(function(){
+'use strict';
+const $ = s => document.querySelector(s);
+const API = window.APP_CONFIG.supabaseUrl + '/functions/v1/caisse-app';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => { const v = Number(n) || 0; return (Number.isInteger(v) ? String(v) : v.toFixed(2)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
+const LS = {
+  get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+  set(k, v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch(e){} },
+};
+
+// Le lien personnel : #t=<jeton> la première fois, puis gardé sur le téléphone.
+const m = location.hash.match(/t=([0-9a-f]{64})/);
+if(m){ LS.set('caisse_jeton', m[1]); history.replaceState(null, '', location.pathname); }
+const JETON = LS.get('caisse_jeton');
+
+const S = { moi:null, projet:LS.get('caisse_projet'), dernier:null, montant:'' };
+
+async function api(action, corps){
+  const opts = {method:'POST', headers:{'x-caisse-jeton':JETON}};
+  if(corps instanceof FormData) opts.body = corps;
+  else if(corps){ opts.body = JSON.stringify(corps); opts.headers['Content-Type'] = 'application/json'; }
+  let r;
+  try { r = await fetch(API + '?action=' + action, opts); }
+  catch(e){ throw new Error('reseau'); }
+  const d = await r.json().catch(() => ({}));
+  if(r.status === 401 || d.erreur === 'lien'){ sansLien(); throw new Error('lien'); }
+  if(!r.ok && !d.erreur) throw new Error('serveur');
+  return d;
+}
+
+function message(t, ms){
+  const el = $('#message'); el.textContent = t; el.hidden = false;
+  clearTimeout(message.t); message.t = setTimeout(() => { el.hidden = true; }, ms || 3500);
+}
+function erreurReseau(e){
+  if(e.message === 'lien') return;
+  message(e.message === 'reseau' ? '📶 ماكاينش الريزو. عاود من بعد.' : '⚠️ وقع مشكل. عاود.');
+}
+
+function montrer(id){ document.querySelectorAll('.plein').forEach(p => { p.hidden = p.id !== id; }); }
+function fermer(){ montrer(null); }
+document.addEventListener('click', e => { if(e.target.closest('[data-fermer]')) fermer(); });
+
+function sansLien(){
+  document.querySelectorAll('main, .plein').forEach(x => { x.hidden = true; });
+  $('#sansLien').hidden = false;
+}
+
+// ---------- accueil
+async function charger(){
+  try {
+    S.moi = await api('moi');
+  } catch(e){ erreurReseau(e); return; }
+  const d = S.moi;
+  $('#accueil').hidden = false;
+  $('#nom').textContent = d.nom;
+  const neg = d.solde < 0;
+  $('#solde').classList.toggle('neg', neg);
+  $('#soldeL').textContent = neg ? '🔴 الشركة كتسالك' : '💰 عندك';
+  $('#soldeV').textContent = fmt(Math.abs(d.solde));
+  $('#attente').hidden = !(d.attente > 0);
+  $('#attente').innerHTML = `⏳ <span class="num">${fmt(d.attente)}</span> درهم كتسنى التأكيد`;
+  if(!d.projets.some(p => p.id === S.projet)) S.projet = d.projets[0] ? d.projets[0].id : null;
+  afficherProjet();
+  afficherHisto();
+}
+
+function afficherProjet(){
+  const p = (S.moi.projets || []).find(x => x.id === S.projet);
+  $('#projetNom').textContent = p ? p.nom : 'اختار المشروع';
+  LS.set('caisse_projet', S.projet);
+}
+
+function afficherHisto(){
+  const h = S.moi.historique || [];
+  if(!h.length){ $('#histo').innerHTML = '<div class="vide">ما كاين والو باقي</div>'; return; }
+  const icone = {a_valider:'⏳', validee:'✅', rejetee:'❌'};
+  const date = d => d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '';
+  $('#histo').innerHTML = h.map(x => x.genre === 'avance'
+    ? `<div class="ligne"><span class="s">💵</span><span class="t"><b>توصلتي بالفلوس</b><span>${esc(x.projet)} · <span class="num">${date(x.date)}</span></span></span><span class="m plus num">+${fmt(x.montant)}</span></div>`
+    : `<div class="ligne"><span class="s">${icone[x.statut] || '•'}</span><span class="t"><b dir="auto">${esc(x.quoi || '—')}</b><span>${esc(x.projet)} · <span class="num">${date(x.date)}</span></span></span>
+        <span class="m num">${x.montant != null ? '-' + fmt(x.montant) : '؟'}</span>
+        ${x.annulable ? `<button class="x" type="button" data-annuler="${esc(x.id)}">❌</button>` : ''}</div>`).join('');
+}
+
+$('#maj').onclick = charger;
+$('#histo').onclick = async e => {
+  const b = e.target.closest('[data-annuler]'); if(!b) return;
+  if(!confirm('نلغيو هاد المصروف؟')) return;
+  try { const r = await api('annuler', {ids:[b.dataset.annuler]}); if(r.ok) message('❌ تلغات'); await charger(); }
+  catch(err){ erreurReseau(err); }
+};
+
+// ---------- projet
+function ouvrirProjets(apres){
+  const ps = S.moi.projets || [];
+  $('#listeProjets').innerHTML = ps.length ? ps.map(p =>
+    `<button class="choix ${p.id === S.projet ? 'actif' : ''}" type="button" data-p="${esc(p.id)}"><span style="font-size:26px">📁</span><span><b dir="auto">${esc(p.nom)}</b><span dir="auto">${esc(p.client)}</span></span></button>`).join('')
+    : '<div class="vide">ما كاين حتى مشروع</div>';
+  S.apresProjet = apres || null;
+  montrer('pProjet');
+}
+$('#projetBtn').onclick = () => ouvrirProjets();
+$('#listeProjets').onclick = async e => {
+  const b = e.target.closest('[data-p]'); if(!b) return;
+  S.projet = b.dataset.p; afficherProjet();
+  const apres = S.apresProjet; S.apresProjet = null;
+  if(apres) await apres(); else fermer();
+};
+
+// ---------- envoi commun
+async function envoyer(type, champs){
+  if(!S.projet){ return ouvrirProjets(() => envoyer(type, champs)); }
+  const f = new FormData();
+  f.append('type', type);
+  f.append('project_id', S.projet);
+  // Un fichier s'ajoute avec son nom ; un texte, sans (sinon FormData refuse).
+  Object.entries(champs).forEach(([k, v]) => { if(v[1] !== undefined) f.append(k, v[0], v[1]); else f.append(k, v[0]); });
+  montrer('pAttente');
+  let r;
+  try { r = await api('envoyer', f); }
+  catch(e){ fermer(); erreurReseau(e); return; }
+  if(r.erreur){
+    fermer();
+    message(r.erreur === 'pas_compris' ? '🤔 ما فهمتش. قول الشي والثمن، مثال: مزوط 200' : '⚠️ وقع مشكل. عاود.', 5000);
+    if(r.erreur === 'pas_compris' && type === 'texte') montrer('pTexte');
+    return;
+  }
+  suite(r);
+}
+
+// Après l'envoi : montant manquant → pavé ; sinon confirmation.
+function suite(r){
+  S.dernier = r;
+  if(r.manque && r.manque.montant){ S.montant = ''; majPave(); montrer('pMontant'); return; }
+  if(r.manque && r.manque.projet){ return ouvrirProjets(async () => { montrer('pAttente'); try { suite(await api('completer', {ids:r.ids, project_id:S.projet})); } catch(e){ fermer(); erreurReseau(e); } }); }
+  $('#carteOk').innerHTML = r.lignes.map(l =>
+    `<div class="r"><span dir="auto">${esc(l.quoi || '—')}</span><b class="num">${l.montant != null ? fmt(l.montant) + ' درهم' : '؟'}</b></div>`).join('')
+    + `<div class="r"><span>📁</span><b dir="auto">${esc((r.lignes[0] || {}).projet || '')}</b></div>`;
+  $('#luOk').textContent = r.transcription ? '🎤 « ' + r.transcription + ' »' : '';
+  montrer('pOk');
+  charger();
+}
+
+$('#annulerOk').onclick = async () => {
+  if(!S.dernier) return fermer();
+  try { const r = await api('annuler', {ids:S.dernier.ids}); fermer(); if(r.ok) message('❌ تلغات'); charger(); }
+  catch(e){ erreurReseau(e); }
+};
+
+// ---------- pavé numérique
+function majPave(){ $('#ecranM').textContent = S.montant ? fmt(S.montant) : '0'; }
+$('#pave').onclick = async e => {
+  const b = e.target.closest('button'); if(!b) return;
+  if(b.dataset.k === 'del'){ S.montant = S.montant.slice(0, -1); majPave(); return; }
+  if(b.dataset.k === 'ok'){
+    if(!(Number(S.montant) > 0)) return;
+    montrer('pAttente');
+    try { suite(await api('completer', {ids:S.dernier.ids, montant:Number(S.montant)})); }
+    catch(err){ montrer('pMontant'); erreurReseau(err); }
+    return;
+  }
+  if(S.montant.length < 7) S.montant = (S.montant + b.textContent).replace(/^0+/, '');
+  majPave();
+};
+
+// ---------- texte
+$('#btnTexte').onclick = () => { $('#texte').value = ''; montrer('pTexte'); setTimeout(() => $('#texte').focus(), 50); };
+$('#envoyerTexte').onclick = () => {
+  const t = $('#texte').value.trim();
+  if(!t){ $('#texte').focus(); return; }
+  envoyer('texte', {texte:[t]});
+};
+
+// ---------- photo (réduite avant l'envoi : plus rapide sur un réseau faible)
+$('#btnPhoto').onclick = () => { if(!S.projet) return ouvrirProjets(() => { fermer(); $('#fichierPhoto').click(); }); $('#fichierPhoto').click(); };
+$('#fichierPhoto').onchange = async e => {
+  const f = e.target.files && e.target.files[0]; e.target.value = '';
+  if(!f) return;
+  montrer('pAttente');
+  let blob = f;
+  try { blob = await reduire(f, 1600, 0.82); } catch(err){ /* on envoie l'original */ }
+  envoyer('photo', {fichier:[blob, 'ticket.jpg']});
+};
+function reduire(fichier, max, qualite){
+  return new Promise((ok, ko) => {
+    const img = new Image(), url = URL.createObjectURL(fichier);
+    img.onload = () => {
+      const r = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? ok(b) : ko(new Error('toBlob')), 'image/jpeg', qualite);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); ko(new Error('image')); };
+    img.src = url;
+  });
+}
+
+// ---------- vocal
+let rec = null, morceaux = [], debut = 0, minuteur = null, flux = null;
+const MAX_S = 120;
+$('#btnVocal').onclick = async () => {
+  if(!S.projet) return ouvrirProjets(() => $('#btnVocal').onclick());
+  if(!navigator.mediaDevices || !window.MediaRecorder){ message('⚠️ هاد التيليفون ما كيسمحش بالأوديو. كتب ولا صيفط تصويرة.', 5000); return; }
+  try { flux = await navigator.mediaDevices.getUserMedia({audio:true}); }
+  catch(e){ message('🎤 خاصك تسمح للميكرو باش تهضر.', 5000); return; }
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+  const type = types.find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
+  rec = new MediaRecorder(flux, type ? {mimeType:type} : undefined);
+  morceaux = [];
+  rec.ondataavailable = e => { if(e.data && e.data.size) morceaux.push(e.data); };
+  rec.start();
+  debut = Date.now();
+  $('#chrono').textContent = '0:00';
+  minuteur = setInterval(() => {
+    const s = Math.floor((Date.now() - debut) / 1000);
+    $('#chrono').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    if(s >= MAX_S) $('#stopVocal').click();
+  }, 250);
+  montrer('pVocal');
+};
+function arreterMicro(){
+  clearInterval(minuteur);
+  if(flux) flux.getTracks().forEach(t => t.stop());
+  flux = null;
+}
+$('#annulVocal').onclick = () => {
+  if(rec && rec.state !== 'inactive'){ rec.onstop = null; rec.stop(); }
+  arreterMicro(); rec = null; fermer();
+};
+$('#stopVocal').onclick = () => {
+  if(!rec || rec.state === 'inactive') return;
+  const r = rec;
+  r.onstop = () => {
+    arreterMicro();
+    const mime = (r.mimeType || 'audio/webm').split(';')[0];
+    const blob = new Blob(morceaux, {type:mime});
+    rec = null;
+    if(Date.now() - debut < 800 || blob.size < 1000){ fermer(); message('🎤 الأوديو قصير بزاف. عاود.'); return; }
+    envoyer('vocal', {fichier:[blob, 'vocal.' + (mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : 'webm')]});
+  };
+  r.stop();
+};
+
+// ---------- démarrage
+if('serviceWorker' in navigator) navigator.serviceWorker.register('app-sw.js', {scope:'./app'}).catch(() => {});
+if(!JETON) sansLien(); else charger();
+document.addEventListener('visibilitychange', () => { if(!document.hidden && JETON && S.moi && !document.querySelector('.plein:not([hidden])')) charger(); });
+})();
+</script>
+</body>
+</html>
