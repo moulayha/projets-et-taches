@@ -55,6 +55,16 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .gros.vocal .e{font-size:60px}
 .gros.photo{background:#1D5889;color:#fff}
 .gros.texte{background:var(--surface);color:var(--fg);border:2px solid var(--line)}
+.gros.donner{grid-column:1/-1;background:#954610;color:#fff;min-height:84px;flex-direction:row;gap:12px}
+.gros.donner .e{font-size:36px}
+
+/* transfert reçu à confirmer */
+.recu{background:var(--warn-bg);border:2px solid #E9B98F;border-radius:20px;padding:14px;margin-bottom:12px}
+.recu .q{font-size:20px;font-weight:800;margin-bottom:10px}
+.recu .b{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.recu button{border-radius:16px;padding:14px;font-size:19px;font-weight:800}
+.recu .oui{background:var(--ok);color:#fff}
+.recu .non{background:var(--surface);border:2px solid var(--line)}
 
 /* historique */
 h2{font-size:18px;margin:6px 4px 10px;color:var(--muted)}
@@ -120,6 +130,7 @@ textarea{width:100%;min-height:150px;font:inherit;font-size:22px;border:2px soli
     <div class="v"><span class="num" id="soldeV">0</span> <small>درهم</small></div>
     <div class="a" id="attente" hidden></div>
   </section>
+  <div id="aConfirmer"></div>
   <button class="projet" id="projetBtn" type="button">
     <span class="i">📁</span>
     <span class="t"><b id="projetNom" dir="auto">—</b><span>المشروع</span></span>
@@ -129,6 +140,7 @@ textarea{width:100%;min-height:150px;font:inherit;font-size:22px;border:2px soli
     <button class="gros vocal" id="btnVocal" type="button"><span class="e">🎤</span>هضر</button>
     <button class="gros photo" id="btnPhoto" type="button"><span class="e">📷</span>تصويرة</button>
     <button class="gros texte" id="btnTexte" type="button"><span class="e">✍️</span>كتب</button>
+    <button class="gros donner" id="btnDonner" type="button"><span class="e">💸</span>عطيت الفلوس لصاحبي</button>
   </div>
   <input type="file" id="fichierPhoto" accept="image/*" capture="environment" hidden>
   <input type="file" id="fichierGalerie" accept="image/*" hidden>
@@ -140,6 +152,13 @@ textarea{width:100%;min-height:150px;font:inherit;font-size:22px;border:2px soli
 <div class="plein" id="pProjet" hidden><div class="ecran">
   <div class="titre">📁 شمن مشروع؟</div>
   <div id="listeProjets" style="display:flex;flex-direction:column;gap:10px"></div>
+  <button class="grand-btn gris" type="button" data-fermer>✖ رجوع</button>
+</div></div>
+
+<!-- Transfert : choix du collègue -->
+<div class="plein" id="pCollegue" hidden><div class="ecran">
+  <div class="titre">💸 لمن عطيتي الفلوس؟</div>
+  <div id="listeCollegues" style="display:flex;flex-direction:column;gap:10px"></div>
   <button class="grand-btn gris" type="button" data-fermer>✖ رجوع</button>
 </div></div>
 
@@ -172,7 +191,7 @@ textarea{width:100%;min-height:150px;font:inherit;font-size:22px;border:2px soli
 
 <!-- Montant -->
 <div class="plein" id="pMontant" hidden><div class="ecran">
-  <div class="titre">💰 شحال؟</div>
+  <div class="titre" id="titreMontant">💰 شحال؟</div>
   <div class="ecranm num" id="ecranM">0</div>
   <div class="pave" id="pave">
     <button type="button">1</button><button type="button">2</button><button type="button">3</button>
@@ -180,6 +199,7 @@ textarea{width:100%;min-height:150px;font:inherit;font-size:22px;border:2px soli
     <button type="button">7</button><button type="button">8</button><button type="button">9</button>
     <button type="button" data-k="del">⌫</button><button type="button">0</button><button type="button" data-k="ok" style="background:var(--accent);color:#fff;border-color:var(--accent)">✅</button>
   </div>
+  <button class="grand-btn gris" type="button" data-fermer>✖ رجوع</button>
 </div></div>
 
 <!-- Attente -->
@@ -274,8 +294,23 @@ async function charger(){
   $('#attente').innerHTML = `⏳ <span class="num">${fmt(d.attente)}</span> درهم كتسنى التأكيد`;
   if(!d.projets.some(p => p.id === S.projet)) S.projet = d.projets[0] ? d.projets[0].id : null;
   afficherProjet();
+  afficherAConfirmer();
   afficherHisto();
 }
+
+// Argent reçu d'un collègue : à confirmer (✅ توصلت) ou à refuser (❌ لا).
+function afficherAConfirmer(){
+  $('#aConfirmer').innerHTML = (S.moi.a_confirmer || []).map(t =>
+    `<div class="recu"><div class="q">📥 <span dir="auto">${esc(t.de)}</span> عطاك <span class="num">${fmt(t.montant)}</span> درهم؟</div>
+      <div class="b"><button class="oui" type="button" data-repondre="${esc(t.id)}" data-ok="1">✅ توصلت</button><button class="non" type="button" data-repondre="${esc(t.id)}" data-ok="0">❌ لا</button></div></div>`).join('');
+}
+$('#aConfirmer').onclick = async e => {
+  const b = e.target.closest('[data-repondre]'); if(!b) return;
+  const ok = b.dataset.ok === '1';
+  if(!ok && !confirm('ما توصلتيش بهاد الفلوس؟')) return;
+  try { const r = await api('repondre', {id:b.dataset.repondre, ok}); if(r.ok) message(ok ? '✅ تزادو ف الحساب ديالك' : '❌ تسجل بلي ما توصلتيش'); await charger(); }
+  catch(err){ erreurReseau(err); }
+};
 
 function afficherProjet(){
   const p = (S.moi.projets || []).find(x => x.id === S.projet);
@@ -290,6 +325,10 @@ function afficherHisto(){
   const date = d => d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '';
   $('#histo').innerHTML = h.map(x => x.genre === 'avance'
     ? `<div class="ligne"><span class="s">💵</span><span class="t"><b>توصلتي بالفلوس</b><span>${esc(x.projet)} · <span class="num">${date(x.date)}</span></span></span><span class="m plus num">+${fmt(x.montant)}</span></div>`
+    : x.genre === 'transfert'
+    ? `<div class="ligne"><span class="s">${x.statut === 'validee' ? (x.sens === 'recu' ? '📥' : '💸') : '⏳'}</span><span class="t"><b dir="auto">${x.sens === 'recu' ? 'عطاك ' : 'عطيتي ل'}${esc(x.avec)}</b><span>${x.statut === 'validee' ? 'تأكد' : 'كيتسنى التأكيد'} · <span class="num">${date(x.date)}</span></span></span>
+        <span class="m num ${x.sens === 'recu' ? 'plus' : ''}">${x.sens === 'recu' ? '+' : '-'}${fmt(x.montant)}</span>
+        ${x.retirable ? `<button class="x" type="button" data-retirer="${esc(x.id)}">❌</button>` : ''}</div>`
     : `<div class="ligne"><span class="s">${icone[x.statut] || '•'}</span><span class="t"><b dir="auto">${esc(x.quoi || '—')}</b><span>${esc(x.projet)} · <span class="num">${date(x.date)}</span></span></span>
         <span class="m num">${x.montant != null ? '-' + fmt(x.montant) : '؟'}</span>
         ${x.annulable ? `<button class="x" type="button" data-annuler="${esc(x.id)}">❌</button>` : ''}</div>`).join('');
@@ -297,10 +336,34 @@ function afficherHisto(){
 
 $('#maj').onclick = charger;
 $('#histo').onclick = async e => {
+  const rt = e.target.closest('[data-retirer]');
+  if(rt){
+    if(!confirm('نلغيو هاد الفلوس اللي عطيتي؟')) return;
+    try { const r = await api('retirer', {id:rt.dataset.retirer}); if(r.ok) message('❌ تلغات'); await charger(); }
+    catch(err){ erreurReseau(err); }
+    return;
+  }
   const b = e.target.closest('[data-annuler]'); if(!b) return;
   if(!confirm('نلغيو هاد المصروف؟')) return;
   try { const r = await api('annuler', {ids:[b.dataset.annuler]}); if(r.ok) message('❌ تلغات'); await charger(); }
   catch(err){ erreurReseau(err); }
+};
+
+// ---------- donner de l'argent à un collègue : choix du collègue, puis montant au pavé
+$('#btnDonner').onclick = () => {
+  const eq = S.moi && S.moi.equipe || [];
+  $('#listeCollegues').innerHTML = eq.length ? eq.map(c =>
+    `<button class="choix" type="button" data-c="${esc(c.id)}"><span style="font-size:26px">👷</span><span><b dir="auto">${esc(c.nom)}</b></span></button>`).join('')
+    : '<div class="vide">ما كاين حتى واحد</div>';
+  montrer('pCollegue');
+};
+$('#listeCollegues').onclick = e => {
+  const b = e.target.closest('[data-c]'); if(!b) return;
+  const c = (S.moi.equipe || []).find(x => x.id === b.dataset.c);
+  S.pave = {mode:'transfert', vers:b.dataset.c, nom:c ? c.nom : ''};
+  S.montant = ''; majPave();
+  $('#titreMontant').textContent = '💸 شحال عطيتي ل' + (c ? c.nom : '') + '؟';
+  montrer('pMontant');
 };
 
 // ---------- projet
@@ -344,7 +407,7 @@ async function envoyer(type, champs){
 // Après l'envoi : montant manquant → pavé ; sinon confirmation.
 function suite(r){
   S.dernier = r;
-  if(r.manque && r.manque.montant){ S.montant = ''; majPave(); montrer('pMontant'); return; }
+  if(r.manque && r.manque.montant){ S.pave = {mode:'depense'}; S.montant = ''; majPave(); $('#titreMontant').textContent = '💰 شحال؟'; montrer('pMontant'); return; }
   if(r.manque && r.manque.projet){ return ouvrirProjets(async () => { montrer('pAttente'); try { suite(await api('completer', {ids:r.ids, project_id:S.projet})); } catch(e){ fermer(); erreurReseau(e); } }); }
   $('#carteOk').innerHTML = r.lignes.map(l =>
     `<div class="r"><span dir="auto">${esc(l.quoi || '—')}</span><b class="num">${l.montant != null ? fmt(l.montant) + ' درهم' : '؟'}</b></div>`).join('')
@@ -368,6 +431,16 @@ $('#pave').onclick = async e => {
   if(b.dataset.k === 'ok'){
     if(!(Number(S.montant) > 0)) return;
     montrer('pAttente');
+    if(S.pave && S.pave.mode === 'transfert'){
+      try {
+        const r = await api('transferer', {vers:S.pave.vers, montant:Number(S.montant)});
+        fermer();
+        if(r.ok) message(`✅ تسجل: عطيتي ${fmt(r.montant)} درهم ل${r.vers}. ⏳ كيتسنى ${r.vers} يأكد.`, 6000);
+        else message('⚠️ وقع مشكل. عاود.');
+        S.pave = null; charger();
+      } catch(err){ montrer('pMontant'); erreurReseau(err); }
+      return;
+    }
     try { suite(await api('completer', {ids:S.dernier.ids, montant:Number(S.montant)})); }
     catch(err){ montrer('pMontant'); erreurReseau(err); }
     return;

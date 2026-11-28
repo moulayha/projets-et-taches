@@ -1,7 +1,7 @@
 // Service de l'application intervenant (app.html) : la rend installable et l'ouvre
 // même avec un réseau faible. Il ne s'occupe que des fichiers de l'application ;
 // les autres pages du site (projets, caisse) et les appels au serveur passent sans lui.
-const CACHE = 'caisse-app-v3';
+const CACHE = 'caisse-app-v4';
 const FICHIERS = ['app.html', 'app.webmanifest', 'app-icone-192.png', 'app-icone-512.png', 'config.js'];
 
 self.addEventListener('install', (e) => {

@@ -226,7 +226,7 @@ const personName = id => id ? ((S.people.get(id) || {}).name || '') : '';
 async function q(p){ const r = await p; if(r.error) throw r.error; return r.data; }
 async function loadAll(){
   const sb = S.sb;
-  const [actifs, projets, ouvriers, cats, alims, avances, depenses, soldes, principal, regl, people, settings] = await Promise.all([
+  const [actifs, projets, ouvriers, cats, alims, avances, depenses, soldes, principal, regl, people, settings, transferts] = await Promise.all([
     q(sb.from('caisse_projets_actifs').select('*').order('name')),
     q(sb.from('projects').select('id,name,code,status,client')),
     q(sb.from('caisse_ouvriers').select('*').order('nom')),
@@ -239,7 +239,9 @@ async function loadAll(){
     q(sb.from('caisse_reglages').select('*').eq('id', 'options').maybeSingle()),
     q(sb.from('people').select('id,name')),
     q(sb.from('settings').select('data').eq('id', 'options').maybeSingle()),
+    q(sb.from('caisse_transferts').select('*').order('date_op', {ascending:false}).order('created_at', {ascending:false})),
   ]);
+  S.transferts = transferts;
   S.actifs = actifs; S.projets = new Map(projets.map(p => [p.id, p])); S.ouvriers = ouvriers; S.categories = cats;
   S.alims = alims; S.avances = avances; S.depenses = depenses; S.soldes = soldes; S.principal = principal;
   S.reglages = (regl && regl.data) || {}; S.people = new Map(people.map(p => [p.id, p]));
@@ -265,7 +267,7 @@ async function refresh(){
 
 /* ---------- rendu ---------- */
 function render(){
-  const nb = S.depenses.filter(d => d.statut === 'a_valider').length;
+  const nb = S.depenses.filter(d => d.statut === 'a_valider').length + S.transferts.filter(t => t.statut === 'a_valider').length;
   $('#nbValider').textContent = nb ? String(nb) : '';
   document.querySelectorAll('#tabs [data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === S.tab)));
   const v = $('#view');
@@ -276,6 +278,7 @@ function render(){
 const addButtons = () => canWrite() ? `<div class="acts">
   <button class="btn" type="button" data-new="alim">+ Alimentation caisse</button>
   <button class="btn" type="button" data-new="avance">+ Avance intervenant</button>
+  <button class="btn" type="button" data-new="transfert">⇄ Transfert entre intervenants</button>
   <button class="btn primary" type="button" data-new="depense">+ Dépense</button></div>` : '';
 
 // Alertes calculées en direct à partir des données chargées (rafraîchies en temps réel).
@@ -311,7 +314,7 @@ function viewBord(){
   const dus = S.soldes.reduce((a, s) => a + Math.max(0, -(Number(s.solde) || 0)), 0);
   const m0 = monthStart();
   const moisDep = S.depenses.filter(d => d.statut === 'validee' && d.date_op >= m0).reduce((a, d) => a + Number(d.montant || 0), 0);
-  const nbVal = S.depenses.filter(d => d.statut === 'a_valider').length;
+  const nbVal = S.depenses.filter(d => d.statut === 'a_valider').length + S.transferts.filter(t => t.statut === 'a_valider').length;
   const rows = S.soldes.filter(s => s.actif || Number(s.avances) || Number(s.depenses)).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
   return `<div class="head"><h2>Tableau de bord</h2>${addButtons()}</div>
   ${viewAlertes()}
@@ -359,10 +362,18 @@ const STATUTS = {a_valider:'à valider', validee:'validée', rejetee:'rejetée'}
 
 function viewValider(){
   const list = S.depenses.filter(d => d.statut === 'a_valider').sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
-  const head = `<div class="head"><h2>À valider <span class="muted small">${list.length}</span></h2>${canWrite() && list.length > 1 ? '<div class="acts"><button class="btn ok" type="button" id="validAll">Valider toutes les lignes complètes</button></div>' : ''}</div>`;
-  if(!list.length) return head + '<div class="empty">Rien à valider. Les dépenses envoyées depuis l’application des intervenants arriveront ici.</div>';
+  const trs = S.transferts.filter(t => t.statut === 'a_valider').sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+  const head = `<div class="head"><h2>À valider <span class="muted small">${list.length + trs.length}</span></h2>${canWrite() && list.length > 1 ? '<div class="acts"><button class="btn ok" type="button" id="validAll">Valider toutes les lignes complètes</button></div>' : ''}</div>`;
+  if(!list.length && !trs.length) return head + '<div class="empty">Rien à valider. Les dépenses et transferts envoyés depuis l’application des intervenants arriveront ici.</div>';
   const ro = canWrite() ? '' : 'disabled';
-  return head + '<div class="cards">' + list.map(d => {
+  // Transferts entre intervenants en attente : celui qui reçoit peut confirmer dans l'application, ou on valide ici.
+  const trHtml = trs.length ? `<h3 style="margin:4px 0 10px">Transferts entre intervenants <span class="muted small">${trs.length}</span></h3><div class="cards" style="margin-bottom:22px">` + trs.map(t =>
+    `<article class="vcard" data-tr="${esc(t.id)}"><div class="vtop"><strong>${esc(ouvName(t.de_ouvrier_id))} → ${esc(ouvName(t.vers_ouvrier_id))}</strong><span class="date muted">${fmtDate(t.date_op)}</span><span class="pill p-info">${t.source === 'app' ? 'Application' : 'Saisie'}</span></div>
+      <div class="vmsg"><b>${dh(t.montant)}</b> donnés par ${esc(ouvName(t.de_ouvrier_id))} à ${esc(ouvName(t.vers_ouvrier_id))}. En attente de la confirmation de ${esc(ouvName(t.vers_ouvrier_id))} dans son application.</div>
+      ${canWrite() ? `<div class="vacts"><button class="btn danger sm" type="button" data-tract="rejeter">Rejeter</button><button class="btn primary sm" type="button" data-tract="valider">Valider</button></div>` : ''}
+    </article>`).join('') + '</div>' : '';
+  if(!list.length) return head + trHtml;
+  return head + trHtml + (trs.length ? '<h3 style="margin:4px 0 10px">Dépenses</h3>' : '') + '<div class="cards">' + list.map(d => {
     const m = d.message_id ? S.messages.get(d.message_id) : null;
     const src = {app_texte:'Application · texte', app_vocal:'Application · vocal', app_photo:'Application · photo',
       whatsapp_texte:'WhatsApp texte', whatsapp_vocal:'WhatsApp vocal', whatsapp_photo:'WhatsApp photo', saisie:'Saisie', import:'Import'}[d.source] || d.source;
@@ -388,12 +399,16 @@ function movements(){
   S.alims.forEach(a => rows.push({k:'alim', id:a.id, date:a.date_op, created:a.created_at, type:'Alimentation', ouvrier:'', projet:'', cat:'', libelle:[a.origine, a.note].filter(Boolean).join(' · '), entree:Number(a.montant), sortie:0, statut:'validee', raw:a}));
   S.avances.forEach(a => rows.push({k:'avance', id:a.id, date:a.date_op, created:a.created_at, type:'Avance', ouvrier:a.ouvrier_id, projet:a.project_id || '', cat:'', libelle:a.note, entree:0, sortie:Number(a.montant), statut:'validee', raw:a}));
   S.depenses.forEach(d => rows.push({k:'depense', id:d.id, date:d.date_op, created:d.created_at, type:d.payeur === 'direct' ? 'Paiement direct' : 'Dépense intervenant', ouvrier:d.ouvrier_id || '', projet:d.project_id || '', cat:d.categorie_id || '', libelle:d.libelle, entree:0, sortie:Number(d.montant || 0), statut:d.statut, raw:d}));
+  // Transfert entre intervenants : ne touche pas la caisse principale (ni entrée ni sortie) ;
+  // le montant est dans le libellé. Visible avec le filtre de l'un ou l'autre intervenant.
+  S.transferts.forEach(t => rows.push({k:'transfert', id:t.id, date:t.date_op, created:t.created_at, type:'Transfert', ouvrier:t.de_ouvrier_id, ouvrier2:t.vers_ouvrier_id, projet:'', cat:'',
+    libelle:`${ouvName(t.de_ouvrier_id)} → ${ouvName(t.vers_ouvrier_id)} : ${dh(t.montant)}${t.note ? ' · ' + t.note : ''}`, entree:0, sortie:0, montantTr:Number(t.montant), statut:t.statut, raw:t}));
   return rows.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created || '').localeCompare(a.created || ''));
 }
 function filteredMovements(){
   const f = S.f;
   return movements().filter(r => (!f.du || r.date >= f.du) && (!f.au || r.date <= f.au) && (!f.type || r.k === f.type)
-    && (!f.projet || r.projet === f.projet) && (!f.ouvrier || r.ouvrier === f.ouvrier) && (!f.cat || r.cat === f.cat) && (!f.statut || r.statut === f.statut));
+    && (!f.projet || r.projet === f.projet) && (!f.ouvrier || r.ouvrier === f.ouvrier || r.ouvrier2 === f.ouvrier) && (!f.cat || r.cat === f.cat) && (!f.statut || r.statut === f.statut));
 }
 const STATUT = {validee:['Validée', 'p-ok'], a_valider:['À valider', 'p-warn'], rejetee:['Rejetée', 'p-bad']};
 function viewMvt(){
@@ -403,7 +418,7 @@ function viewMvt(){
   return `<div class="head"><h2>Mouvements <span class="muted small">${rows.length}</span></h2><div class="acts"><button class="btn" type="button" id="exportXlsx">Exporter Excel</button>${canWrite() ? '<button class="btn primary" type="button" data-new="depense">+ Dépense</button>' : ''}</div></div>
   <div class="filters" id="filters">
     <label>Du <input type="date" data-f="du" value="${esc(f.du)}"></label><label>au <input type="date" data-f="au" value="${esc(f.au)}"></label>
-    <select data-f="type" aria-label="Type"><option value="">Tous les types</option>${[['alim', 'Alimentations'], ['avance', 'Avances'], ['depense', 'Dépenses']].map(([k, l]) => `<option value="${k}" ${f.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <select data-f="type" aria-label="Type"><option value="">Tous les types</option>${[['alim', 'Alimentations'], ['avance', 'Avances'], ['depense', 'Dépenses'], ['transfert', 'Transferts']].map(([k, l]) => `<option value="${k}" ${f.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
     <select data-f="projet" aria-label="Projet"><option value="">Tous les projets</option>${usedProj.map(p => `<option value="${esc(p.id)}" ${f.projet === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
     <select data-f="ouvrier" aria-label="Intervenant">${ouvOptions(f.ouvrier, 'Tous les intervenants')}</select>
     <select data-f="cat" aria-label="Catégorie"><option value="">Toutes les catégories</option>${S.categories.map(c => `<option value="${esc(c.id)}" ${f.cat === c.id ? 'selected' : ''}>${esc(c.nom)}</option>`).join('')}</select>
@@ -552,6 +567,17 @@ function bindView(){
     const pm = t.closest('[data-projmvt]'); if(pm){ S.f = {...S.f, projet:pm.dataset.projmvt, du:'', au:''}; setTab('mvt'); return; }
     const ov = t.closest('tr[data-ouvrier]'); if(ov){ S.f = {...S.f, ouvrier:ov.dataset.ouvrier, du:'', au:''}; setTab('mvt'); return; }
     const ed = t.closest('[data-edit]'); if(ed){ const [k, id] = ed.dataset.edit.split(':'); openForm(k, id); return; }
+    const tra = t.closest('[data-tract]');
+    if(tra){
+      const id = tra.closest('[data-tr]').dataset.tr, tr = S.transferts.find(x => x.id === id); if(!tr) return;
+      if(tra.dataset.tract === 'valider'){
+        tra.disabled = true; await run(S.sb.from('caisse_transferts').update({statut:'validee'}).eq('id', id), 'Transfert validé.');
+      } else {
+        if(!confirm('Rejeter ce transfert ? Il ne comptera dans le solde d’aucun des deux intervenants.')) return;
+        tra.disabled = true; await run(S.sb.from('caisse_transferts').update({statut:'rejetee'}).eq('id', id), 'Transfert rejeté.');
+      }
+      return;
+    }
     const act = t.closest('[data-act]');
     if(act){
       const card = act.closest('.vcard'), id = card.dataset.id, d = S.depenses.find(x => x.id === id); if(!d) return;
@@ -633,8 +659,9 @@ async function openJustif(path){
 /* ---------- fenêtre de saisie ---------- */
 const dlg = $('#dlg'), form = $('#dlgForm');
 function openForm(kind, id, override){
-  const T = {alim:'caisse_alimentations', avance:'caisse_avances', depense:'caisse_depenses', ouvrier:'caisse_ouvriers'}[kind];
-  const src = {alim:S.alims, avance:S.avances, depense:S.depenses, ouvrier:S.ouvriers}[kind];
+  const T = {alim:'caisse_alimentations', avance:'caisse_avances', depense:'caisse_depenses', ouvrier:'caisse_ouvriers', transfert:'caisse_transferts'}[kind];
+  const src = {alim:S.alims, avance:S.avances, depense:S.depenses, ouvrier:S.ouvriers, transfert:S.transferts}[kind];
+  if(!T) return;
   const cur = id ? {...(src.find(x => x.id === id) || {}), ...(override || {})} : {};
   if(id && !cur.id) return;
   const editable = kind === 'ouvrier' ? isSuper() : canWrite();
@@ -663,6 +690,15 @@ function openForm(kind, id, override){
       <label class="f"><span>Justificatif (photo du ticket, optionnel)</span>${cur.justificatif ? `<span><button class="linkbtn" type="button" data-justif-dlg="${esc(cur.justificatif)}">Voir le justificatif actuel</button></span>` : ''}<input type="file" name="fichier" accept="image/*,application/pdf" ${dis}></label>
       ${id ? `<label class="f"><span>Statut</span><select name="statut" ${dis}>${Object.entries(STATUT).map(([k, [l]]) => `<option value="${k}" ${cur.statut === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : '<p class="muted small" style="margin:0">Une dépense saisie ici est validée directement.</p>'}
       ${cur.validee_par ? `<p class="muted small" style="margin:0">Validée par ${esc(personName(cur.validee_par))} le ${new Date(cur.validee_le).toLocaleString('fr-FR')}</p>` : ''}`;
+  } else if(kind === 'transfert'){
+    title = id ? 'Transfert entre intervenants' : 'Nouveau transfert entre intervenants';
+    body = `<div class="frow">${dateF}${montantF}</div>
+      <label class="f"><span>Donné par</span><select name="de_ouvrier_id" required ${dis}>${ouvOptions(cur.de_ouvrier_id)}</select></label>
+      <label class="f"><span>Reçu par</span><select name="vers_ouvrier_id" required ${dis}>${ouvOptions(cur.vers_ouvrier_id)}</select></label>
+      <label class="f"><span>Note</span><textarea name="note" rows="2" ${dis}>${esc(cur.note || '')}</textarea></label>
+      ${id ? `<label class="f"><span>Statut</span><select name="statut" ${dis}>${Object.entries(STATUT).map(([k, [l]]) => `<option value="${k}" ${cur.statut === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : '<p class="muted small" style="margin:0">Un transfert saisi ici est validé directement : le montant passe du solde de l’un au solde de l’autre. La caisse principale ne bouge pas.</p>'}
+      ${cur.source === 'app' ? `<p class="muted small" style="margin:0">Déclaré dans l’application${cur.confirme_par_ouvrier ? ` · confirmé par ${esc(ouvName(cur.confirme_par_ouvrier))}` : ''}</p>` : ''}
+      ${cur.validee_par ? `<p class="muted small" style="margin:0">Validé par ${esc(personName(cur.validee_par) || ouvName(cur.confirme_par_ouvrier))} le ${new Date(cur.validee_le).toLocaleString('fr-FR')}</p>` : ''}`;
   } else if(kind === 'ouvrier'){
     title = id ? 'Intervenant' : 'Nouvel intervenant';
     body = `<label class="f"><span>Nom</span><input type="text" name="nom" required value="${esc(cur.nom || '')}" ${dis}></label>
@@ -692,6 +728,12 @@ function openForm(kind, id, override){
       if(!(row.montant > 0)){ err.textContent = 'Indique un montant supérieur à 0.'; return; }
     }
     if(kind === 'alim'){ row.origine = g('origine'); row.note = g('note'); }
+    if(kind === 'transfert'){
+      row.de_ouvrier_id = g('de_ouvrier_id'); row.vers_ouvrier_id = g('vers_ouvrier_id'); row.note = g('note');
+      if(!row.de_ouvrier_id || !row.vers_ouvrier_id){ err.textContent = 'Choisis qui donne et qui reçoit.'; return; }
+      if(row.de_ouvrier_id === row.vers_ouvrier_id){ err.textContent = 'Celui qui donne et celui qui reçoit doivent être différents.'; return; }
+      if(id) row.statut = g('statut'); else { row.statut = 'validee'; row.source = 'saisie'; }
+    }
     if(kind === 'avance'){ row.ouvrier_id = g('ouvrier_id'); row.project_id = g('project_id') || null; row.note = g('note'); if(!row.ouvrier_id){ err.textContent = 'Choisis l’intervenant.'; return; } }
     if(kind === 'depense'){
       row.payeur = g('payeur') || 'ouvrier'; row.ouvrier_id = row.payeur === 'ouvrier' ? (g('ouvrier_id') || null) : null;
@@ -802,6 +844,7 @@ $('#tabs').addEventListener('click', e => { const b = e.target.closest('[data-ta
   if(S.level === 'lecture') setSync('Lecture seule : tu consultes la caisse sans pouvoir la modifier.');
   sb.channel('rt-caisse')
     .on('postgres_changes', {event:'*', schema:'public', table:'caisse_depenses'}, scheduleReload)
+    .on('postgres_changes', {event:'*', schema:'public', table:'caisse_transferts'}, scheduleReload)
     .on('postgres_changes', {event:'*', schema:'public', table:'caisse_avances'}, scheduleReload)
     .on('postgres_changes', {event:'*', schema:'public', table:'caisse_alimentations'}, scheduleReload)
     .on('postgres_changes', {event:'*', schema:'public', table:'caisse_messages'}, scheduleReload)

@@ -9,6 +9,9 @@
 //   envoyer    → (multipart) texte, vocal ou photo + projet choisi → dépense(s) « à valider »
 //   completer  → { ids, montant?, project_id? } : complète une dépense qui vient d'être envoyée
 //   annuler    → { ids } : supprime une dépense encore à valider, envoyée il y a moins de 3 h
+//   transferer → { vers, montant } : « j'ai donné de l'argent à un collègue » (à confirmer)
+//   repondre   → { id, ok } : le collègue confirme (ou refuse) qu'il a bien reçu l'argent
+//   retirer    → { id } : celui qui donne supprime un transfert pas encore confirmé
 //
 // Secrets : ANTHROPIC_API_KEY (lecture des messages et tickets), GROQ_API_KEY (vocaux).
 // SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont fournis automatiquement.
@@ -60,6 +63,9 @@ Deno.serve(async (req) => {
     if (action === "envoyer") return json(await envoyerDepense(ouv, await req.formData()));
     if (action === "completer") return json(await completer(ouv, await req.json()));
     if (action === "annuler") return json(await annuler(ouv, await req.json()));
+    if (action === "transferer") return json(await transferer(ouv, await req.json()));
+    if (action === "repondre") return json(await repondre(ouv, await req.json()));
+    if (action === "retirer") return json(await retirer(ouv, await req.json()));
     return json({ erreur: "action" }, 400);
   } catch (e) {
     console.error(action, String((e as Error)?.message ?? e));
@@ -83,14 +89,20 @@ async function intervenant(jeton: string | null): Promise<Ouvrier | null> {
 
 async function moi(ouv: Ouvrier) {
   const depuis = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
-  const [projets, categories, { data: s }, { data: deps }, { data: avs }] = await Promise.all([
+  const [projets, categories, { data: s }, { data: deps }, { data: avs }, { data: trs }, { data: equipe }] = await Promise.all([
     chargerProjets(), chargerCategories(),
     sb.from("caisse_soldes_ouvriers").select("solde").eq("ouvrier_id", ouv.id).maybeSingle(),
     sb.from("caisse_depenses").select("id, date_op, montant, categorie_id, project_id, statut, source, libelle, created_at")
       .eq("ouvrier_id", ouv.id).eq("payeur", "ouvrier").gte("date_op", depuis).order("created_at", { ascending: false }).limit(40),
     sb.from("caisse_avances").select("id, date_op, montant, project_id, created_at")
       .eq("ouvrier_id", ouv.id).gte("date_op", depuis).order("created_at", { ascending: false }).limit(20),
+    sb.from("caisse_transferts").select("id, date_op, montant, statut, de_ouvrier_id, vers_ouvrier_id, created_at")
+      .or(`de_ouvrier_id.eq.${ouv.id},vers_ouvrier_id.eq.${ouv.id}`).neq("statut", "rejetee")
+      .gte("date_op", depuis).order("created_at", { ascending: false }).limit(30),
+    sb.from("caisse_ouvriers").select("id, nom, actif").neq("id", ouv.id).order("nom"),
   ]);
+  const nomO = (id: string) => (equipe ?? []).find((x: any) => x.id === id)?.nom ?? "—";
+  const collegues = (equipe ?? []).filter((x: any) => x.actif);
   const nomP = (id: string | null) => { const p = projets.find((x) => x.id === id); return p ? nomProjet(p) : ""; };
   const cat = (id: string | null) => categories.find((c) => c.id === id);
   const attente = (deps ?? []).filter((d: any) => d.statut === "a_valider").reduce((a: number, d: any) => a + Number(d.montant || 0), 0);
@@ -112,13 +124,27 @@ async function moi(ouv: Ouvrier) {
       annulable: d.statut === "a_valider" && String(d.source).startsWith("app_") && maintenant - Date.parse(d.created_at) < ANNULATION_MS,
     })),
     ...(avs ?? []).map((a: any) => ({ genre: "avance", id: a.id, date: a.date_op, cree: a.created_at, montant: Number(a.montant), projet: nomP(a.project_id) })),
+    ...(trs ?? []).map((t: any) => {
+      const donne = t.de_ouvrier_id === ouv.id;
+      return {
+        genre: "transfert", id: t.id, date: t.date_op, cree: t.created_at, montant: Number(t.montant), statut: t.statut,
+        sens: donne ? "donne" : "recu", avec: nomO(donne ? t.vers_ouvrier_id : t.de_ouvrier_id),
+        retirable: donne && t.statut === "a_valider",
+      };
+    }),
   ].sort((a, b) => (b.cree > a.cree ? 1 : -1)).slice(0, 30);
+
+  // Transferts reçus à confirmer : affichés en haut de l'application.
+  const aConfirmer = (trs ?? []).filter((t: any) => t.vers_ouvrier_id === ouv.id && t.statut === "a_valider")
+    .map((t: any) => ({ id: t.id, de: nomO(t.de_ouvrier_id), montant: Number(t.montant), date: t.date_op }));
 
   return {
     nom: ouv.nom,
     solde: Number(s?.solde ?? 0),
     attente,
     projets: visibles.map((p) => ({ id: p.id, nom: nomProjet(p), client: (p.client ?? "").trim() })),
+    equipe: collegues.map((x: any) => ({ id: x.id, nom: x.nom })),
+    a_confirmer: aConfirmer,
     historique,
   };
 }
@@ -267,6 +293,45 @@ async function annuler(ouv: Ouvrier, corps: any) {
     await sb.from("caisse_messages").delete().eq("id", mid).eq("ouvrier_id", ouv.id);
   }
   return { ok: true, ids };
+}
+
+// ---------------------------------------------------------------- Transferts entre intervenants
+
+async function transferer(ouv: Ouvrier, corps: any) {
+  const vers = typeof corps?.vers === "string" ? corps.vers : "";
+  const montant = Math.round(Number(corps?.montant) * 100) / 100;
+  if (!(montant > 0 && montant < 1e7)) return { erreur: "montant" };
+  if (!vers || vers === ouv.id) return { erreur: "collegue" };
+  const { data: c } = await sb.from("caisse_ouvriers").select("id, nom, actif").eq("id", vers).maybeSingle();
+  if (!c || !c.actif) return { erreur: "collegue" };
+  const { data, error } = await sb.from("caisse_transferts")
+    .insert({ de_ouvrier_id: ouv.id, vers_ouvrier_id: vers, montant, statut: "a_valider", source: "app", note: "Déclaré dans l'application" })
+    .select("id").single();
+  if (error) throw error;
+  return { ok: true, id: data.id, vers: c.nom, montant };
+}
+
+// Le collègue qui a reçu l'argent confirme (ok = true) ou dit qu'il n'a rien reçu.
+async function repondre(ouv: Ouvrier, corps: any) {
+  if (typeof corps?.id !== "string") return { erreur: "introuvable" };
+  const { data: t } = await sb.from("caisse_transferts").select("id").eq("id", corps.id)
+    .eq("vers_ouvrier_id", ouv.id).eq("statut", "a_valider").maybeSingle();
+  if (!t) return { erreur: "introuvable" };
+  const ok = corps.ok === true;
+  const { error } = await sb.from("caisse_transferts")
+    .update(ok ? { statut: "validee", confirme_par_ouvrier: ouv.id } : { statut: "rejetee", note: "Refusé par le collègue dans l'application" })
+    .eq("id", t.id);
+  if (error) throw error;
+  return { ok: true, statut: ok ? "validee" : "rejetee" };
+}
+
+// Celui qui donne peut retirer un transfert tant qu'il n'est pas confirmé : il est supprimé.
+async function retirer(ouv: Ouvrier, corps: any) {
+  if (typeof corps?.id !== "string") return { erreur: "introuvable" };
+  const { data, error } = await sb.from("caisse_transferts").delete().eq("id", corps.id)
+    .eq("de_ouvrier_id", ouv.id).eq("statut", "a_valider").select("id");
+  if (error) throw error;
+  return data?.length ? { ok: true } : { erreur: "introuvable" };
 }
 
 // ---------------------------------------------------------------- Vocaux
