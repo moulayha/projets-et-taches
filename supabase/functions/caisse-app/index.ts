@@ -8,7 +8,7 @@
 //   moi        → nom, solde, projets proposés, historique récent
 //   envoyer    → (multipart) texte, vocal ou photo + projet choisi → dépense(s) « à valider »
 //   completer  → { ids, montant?, project_id? } : complète une dépense qui vient d'être envoyée
-//   annuler    → { ids } : annule une dépense encore à valider, envoyée il y a moins de 3 h
+//   annuler    → { ids } : supprime une dépense encore à valider, envoyée il y a moins de 3 h
 //
 // Secrets : ANTHROPIC_API_KEY (lecture des messages et tickets), GROQ_API_KEY (vocaux).
 // SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont fournis automatiquement.
@@ -249,10 +249,23 @@ async function completer(ouv: Ouvrier, corps: any) {
   return await resume(ids);
 }
 
+// Une dépense annulée par l'intervenant n'a jamais existé : elle est supprimée, avec le
+// message d'origine et son fichier (photo, vocal) quand plus aucune dépense n'y renvoie.
+// Seule la trace du journal (caisse_historique) garde la suppression.
 async function annuler(ouv: Ouvrier, corps: any) {
   const ids = await lesMiennes(ouv, corps?.ids);
   if (!ids.length) return { erreur: "introuvable" };
-  await sb.from("caisse_depenses").update({ statut: "rejetee" }).in("id", ids);
+  const { data: lignes } = await sb.from("caisse_depenses").select("id, message_id").in("id", ids);
+  const { error } = await sb.from("caisse_depenses").delete().in("id", ids);
+  if (error) throw error;
+  const messages = [...new Set((lignes ?? []).map((d: any) => d.message_id).filter(Boolean))] as string[];
+  for (const mid of messages) {
+    const { count } = await sb.from("caisse_depenses").select("id", { count: "exact", head: true }).eq("message_id", mid);
+    if (count) continue; // une autre dépense du même message reste
+    const { data: m } = await sb.from("caisse_messages").select("media_path").eq("id", mid).eq("ouvrier_id", ouv.id).maybeSingle();
+    if (m?.media_path) await sb.storage.from(BUCKET).remove([m.media_path]);
+    await sb.from("caisse_messages").delete().eq("id", mid).eq("ouvrier_id", ouv.id);
+  }
   return { ok: true, ids };
 }
 
