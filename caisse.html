@@ -665,7 +665,11 @@ function openForm(kind, id, override){
   if(!T) return;
   const cur = id ? {...(src.find(x => x.id === id) || {}), ...(override || {})} : {};
   if(id && !cur.id) return;
-  const editable = kind === 'ouvrier' ? isSuper() : canWrite();
+  // Un mouvement enregistré ne se modifie / supprime que par le super admin ;
+  // le gestionnaire traite seulement les dépenses et transferts encore « à valider ».
+  const enAttente = (kind === 'depense' || kind === 'transfert') && cur.statut === 'a_valider';
+  const editable = kind === 'ouvrier' || id ? (isSuper() || (enAttente && canWrite())) : canWrite();
+  const verrou = id && kind !== 'ouvrier' && !editable && canWrite();
   const dis = editable ? '' : 'disabled';
   let title = '', body = '';
   const dateF = `<label class="f"><span>Date</span><input type="date" name="date_op" required value="${esc(cur.date_op || todayISO())}" ${dis}></label>`;
@@ -708,8 +712,8 @@ function openForm(kind, id, override){
       <label class="f"><span>Note</span><textarea name="note" rows="2" ${dis}>${esc(cur.note || '')}</textarea></label>`;
   }
   const by = cur.created_by ? `<span class="muted small">Saisi par ${esc(personName(cur.created_by) || '—')}</span>` : '';
-  form.innerHTML = `<h3>${esc(title)}</h3>${body}<p class="err" id="dlgErr" role="alert"></p>
-    <div class="dacts">${id && editable ? '<button class="btn danger" type="button" id="dlgDel">Supprimer</button>' : ''}${by}<span class="sp"></span><button class="btn" type="button" id="dlgCancel">${editable ? 'Annuler' : 'Fermer'}</button>${editable ? '<button class="btn primary" type="submit" id="dlgSave">Enregistrer</button>' : ''}</div>`;
+  form.innerHTML = `<h3>${esc(title)}</h3>${body}${verrou ? '<p class="muted small" style="margin:0">🔒 Mouvement enregistré : seul le super admin peut le modifier ou le supprimer.</p>' : ''}<p class="err" id="dlgErr" role="alert"></p>
+    <div class="dacts">${id && editable && isSuper() ? '<button class="btn danger" type="button" id="dlgDel">Supprimer</button>' : ''}${by}<span class="sp"></span><button class="btn" type="button" id="dlgCancel">${editable ? 'Annuler' : 'Fermer'}</button>${editable ? '<button class="btn primary" type="submit" id="dlgSave">Enregistrer</button>' : ''}</div>`;
   form.onchange = e => { if(e.target.name === 'payeur') form.querySelector('#fOuvrier').hidden = e.target.value === 'direct'; };
   form.onclick = e => { const j = e.target.closest('[data-justif-dlg]'); if(j) openJustif(j.dataset.justifDlg); };
   $('#dlgCancel').onclick = () => dlg.close();
