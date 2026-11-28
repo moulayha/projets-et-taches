@@ -131,6 +131,7 @@ textarea{width:100%;min-height:150px;font:inherit;font-size:22px;border:2px soli
     <button class="gros texte" id="btnTexte" type="button"><span class="e">✍️</span>كتب</button>
   </div>
   <input type="file" id="fichierPhoto" accept="image/*" capture="environment" hidden>
+  <input type="file" id="fichierGalerie" accept="image/*" hidden>
   <h2>📋 آخر الحركات</h2>
   <div id="histo"></div>
 </main>
@@ -139,6 +140,14 @@ textarea{width:100%;min-height:150px;font:inherit;font-size:22px;border:2px soli
 <div class="plein" id="pProjet" hidden><div class="ecran">
   <div class="titre">📁 شمن مشروع؟</div>
   <div id="listeProjets" style="display:flex;flex-direction:column;gap:10px"></div>
+  <button class="grand-btn gris" type="button" data-fermer>✖ رجوع</button>
+</div></div>
+
+<!-- Photo : appareil photo ou galerie -->
+<div class="plein" id="pPhoto" hidden><div class="ecran">
+  <div class="titre">📷 تصويرة ديال الورقة</div>
+  <button class="gros photo" type="button" id="choixCamera"><span class="e">📷</span>صوّر دابا</button>
+  <button class="gros texte" type="button" id="choixGalerie"><span class="e">🖼️</span>من التصاور</button>
   <button class="grand-btn gris" type="button" data-fermer>✖ رجوع</button>
 </div></div>
 
@@ -376,7 +385,11 @@ $('#envoyerTexte').onclick = () => {
 };
 
 // ---------- photo (réduite avant l'envoi : plus rapide sur un réseau faible)
-$('#btnPhoto').onclick = () => { if(!S.projet) return ouvrirProjets(() => { fermer(); $('#fichierPhoto').click(); }); $('#fichierPhoto').click(); };
+// Le bouton 📷 propose l'appareil photo ou une photo déjà prise (galerie).
+$('#btnPhoto').onclick = () => { if(!S.projet) return ouvrirProjets(() => montrer('pPhoto')); montrer('pPhoto'); };
+$('#choixCamera').onclick = () => { fermer(); $('#fichierPhoto').click(); };
+$('#choixGalerie').onclick = () => { fermer(); $('#fichierGalerie').click(); };
+$('#fichierGalerie').onchange = e => $('#fichierPhoto').onchange(e);
 $('#fichierPhoto').onchange = async e => {
   const f = e.target.files && e.target.files[0]; e.target.value = '';
   if(!f) return;
