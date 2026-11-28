@@ -275,7 +275,7 @@ async function transcrire(media: { mime: string; bytes: Uint8Array }, projets: P
   if (!GROQ_KEY) return null;
   const categories = await chargerCategories();
   const mots = [...categories.flatMap((c) => c.mots_cles ?? []), ...projets.map((p) => nomProjet(p)), "درهم"].filter(Boolean);
-  const indice = ("مصاريف الكاسة: " + mots.join("، ")).slice(0, 400);
+  const indice = ("مصاريف لاكيس: " + mots.join("، ")).slice(0, 400);
   const ext = media.mime.includes("webm") ? "webm" : media.mime.includes("mp4") ? "m4a" : media.mime.includes("ogg") ? "ogg" : "webm";
   const form = new FormData();
   form.append("file", new Blob([media.bytes], { type: media.mime }), `vocal.${ext}`);

@@ -464,7 +464,7 @@ function ouvrirLien(ouvId, jeton){
   const d = $('#dlgLien'), c = $('#dlgLienC');
   const url = jeton ? new URL('app.html', location.href).href + '#t=' + jeton : '';
   const tel = String(o.telephone || '').replace(/\D/g, '');
-  const texte = `السلام ${o.nom}، هادا الرابط ديال الكاسة. حلّو ودير «Ajouter à l'écran d'accueil» :\n${url}`;
+  const texte = `السلام ${o.nom}، هادا الرابط ديال لاكيس. حلّو ودير «Ajouter à l'écran d'accueil» :\n${url}`;
   c.innerHTML = `<h3>📱 Application de ${esc(o.nom)}</h3>
     ${jeton ? `<p class="muted small">Fais scanner ce code avec son téléphone, ou envoie-lui le lien. <b>Ce lien ne sera plus affiché</b> : garde-le si besoin.</p>
       <div id="qrBox" style="display:flex;justify-content:center;padding:8px">…</div>
