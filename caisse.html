@@ -335,7 +335,8 @@ function viewBord(){
 }
 
 function projOptions(selected, opts = {}){
-  const list = [...S.actifs];
+  // « Interne Clic Event » (dépenses hors projet client) en tête de liste.
+  const list = [...S.actifs].sort((a, b) => (b.id === 'interne-clic-event') - (a.id === 'interne-clic-event'));
   if(selected && !list.some(p => p.id === selected) && S.projets.has(selected)) list.unshift({...S.projets.get(selected), inactive:true});
   return `<option value="">${opts.empty || '— Projet —'}</option>` + list.map(p =>
     `<option value="${esc(p.id)}" ${p.id === selected ? 'selected' : ''}>${esc(p.name || 'Sans titre')}${p.inactive ? ' (plus actif)' : ''}</option>`).join('');
